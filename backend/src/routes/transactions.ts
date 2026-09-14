@@ -95,7 +95,7 @@ export default async function transactionRoutes(fastify: any) {
         type: 'object',
         properties: {
           type:       { type: 'string', enum: TYPES },
-          categoryId: { type: 'string', format: 'uuid' },
+          categoryId: { type: 'string', description: 'UUID d\'une catégorie, ou "none" pour les transactions sans catégorie' },
           from:       { type: 'string', format: 'date' },
           to:         { type: 'string', format: 'date' },
           limit:      { type: 'integer', minimum: 1, maximum: 200, default: 50 },
@@ -120,8 +120,9 @@ export default async function transactionRoutes(fastify: any) {
     const { type, categoryId, from, to, limit = 50, offset = 0 } = req.query
 
     const where: any = { userId: req.user.userId }
-    if (type)       where.type = type
-    if (categoryId) where.categoryId = categoryId
+    if (type) where.type = type
+    if (categoryId === 'none') where.categoryId = null
+    else if (categoryId)       where.categoryId = categoryId
     if (from || to) {
       where.date = {
         ...(from && { gte: new Date(from) }),
