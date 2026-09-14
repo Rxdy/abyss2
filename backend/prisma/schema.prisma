@@ -29,6 +29,7 @@ model User {
 
   categories     Category[]
   transactions   Transaction[]
+  recurring      RecurringTransaction[]
 
   @@map("users")
   @@schema("dbo")
@@ -56,6 +57,7 @@ model Category {
   parent        Category?     @relation("CategorySubcategories", fields: [parentId], references: [id], onDelete: SetNull)
   children      Category[]    @relation("CategorySubcategories")
   transactions  Transaction[]
+  recurring     RecurringTransaction[]
 
   @@index([userId])
   @@index([parentId])
@@ -71,6 +73,7 @@ model Transaction {
   id              String   @id @default(uuid()) @db.Uuid
   userId          String   @map("user_id") @db.Uuid
   categoryId      String?  @map("category_id") @db.Uuid
+  recurringId     String?  @map("recurring_id") @db.Uuid  // renseigné si générée depuis une charge fixe
   titleEncrypted  String   @map("title_encrypted") @db.Text
   amountEncrypted String   @map("amount_encrypted") @db.Text
   date            DateTime @db.Date
@@ -79,12 +82,48 @@ model Transaction {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  recurring       RecurringTransaction? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([userId, date])
   @@index([categoryId])
+  @@index([recurringId])
   @@map("transactions")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: RecurringTransaction — dépense ou revenu fixe mensuel
+//
+// Un job de rattrapage (voir utils/recurring.ts) génère une Transaction
+// normale pour chaque mois écoulé depuis `lastGeneratedMonth` jusqu'au mois
+// courant (dès que `dayOfMonth` est passé). Les transactions déjà générées
+// restent des transactions indépendantes : modifier ou supprimer le modèle
+// récurrent ne change jamais l'historique déjà généré.
+// ============================================================
+model RecurringTransaction {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  categoryId         String?   @map("category_id") @db.Uuid
+  titleEncrypted     String    @map("title_encrypted") @db.Text
+  amountEncrypted    String    @map("amount_encrypted") @db.Text
+  type               String    @default("expense") @db.VarChar(20)  // 'expense' | 'income'
+  dayOfMonth         Int       @map("day_of_month") @db.Integer     // 1-31, ramené au dernier jour du mois si besoin
+  note               String?   @db.Text
+  active             Boolean   @default(true)
+  startDate          DateTime  @map("start_date") @db.Date
+  endDate            DateTime? @map("end_date") @db.Date
+  lastGeneratedMonth String?   @map("last_generated_month") @db.VarChar(7)  // 'YYYY-MM'
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category           Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions       Transaction[]
+
+  @@index([userId])
+  @@map("recurring_transactions")
   @@schema("dbo")
 }

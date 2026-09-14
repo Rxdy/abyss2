@@ -31,6 +31,32 @@ const tree = computed(() =>
   })),
 )
 
+const moving = ref(false)
+
+/**
+ * Déplace une catégorie d'un cran vers le haut ou le bas, parmi ses
+ * frères : les catégories de premier niveau entre elles, ou les
+ * sous-catégories d'un même parent entre elles.
+ */
+async function move(category, direction) {
+  const siblings = category.parentId ? categories.childrenOf(category.parentId) : categories.topLevel
+  const index = siblings.findIndex((c) => c.id === category.id)
+  const targetIndex = direction === 'up' ? index - 1 : index + 1
+  if (targetIndex < 0 || targetIndex >= siblings.length) return
+
+  const reordered = [...siblings]
+  ;[reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]]
+
+  moving.value = true
+  try {
+    await categories.reorder(reordered)
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    moving.value = false
+  }
+}
+
 function reset() {
   form.value = { id: null, name: '', color: PALETTE[0], parentId: null }
   error.value = ''
@@ -143,7 +169,7 @@ onMounted(() => categories.fetchAll({ force: true }).catch(() => {}))
       <div class="field">
         <label class="field__label" for="category-parent">Catégorie parente</label>
         <select id="category-parent" v-model="form.parentId" class="field__select">
-          <option :value="null">Aucune (catégorie principale)</option>
+          <option :value="null">Aucune</option>
           <option v-for="option in parentOptions" :key="option.id" :value="option.id">
             {{ option.name }}
           </option>
@@ -193,12 +219,21 @@ onMounted(() => categories.fetchAll({ force: true }).catch(() => {}))
 
     <!-- Liste -->
     <ul v-if="categories.items.length" class="categories__list">
-      <template v-for="node in tree" :key="node.category.id">
+      <template v-for="(node, index) in tree" :key="node.category.id">
         <li class="category">
           <span class="category__color" :style="{ background: node.category.color ?? 'var(--color-text-muted)' }" aria-hidden="true" />
           <BaseText size="sm" color="primary" truncate class="category__name">
             {{ node.category.name }}
           </BaseText>
+
+          <div class="category__move">
+            <button type="button" class="category__action" :disabled="moving || index === 0" :aria-label="`Monter ${node.category.name}`" @click="move(node.category, 'up')">
+              <BaseIcon name="chevron" :size="14" class="category__move-icon category__move-icon--up" />
+            </button>
+            <button type="button" class="category__action" :disabled="moving || index === tree.length - 1" :aria-label="`Descendre ${node.category.name}`" @click="move(node.category, 'down')">
+              <BaseIcon name="chevron" :size="14" class="category__move-icon category__move-icon--down" />
+            </button>
+          </div>
 
           <button type="button" class="category__action" :aria-label="`Modifier ${node.category.name}`" @click="edit(node.category)">
             <BaseIcon name="tag" :size="16" />
@@ -208,11 +243,20 @@ onMounted(() => categories.fetchAll({ force: true }).catch(() => {}))
           </button>
         </li>
 
-        <li v-for="child in node.children" :key="child.id" class="category category--child">
+        <li v-for="(child, childIndex) in node.children" :key="child.id" class="category category--child">
           <span class="category__color" :style="{ background: child.color ?? 'var(--color-text-muted)' }" aria-hidden="true" />
           <BaseText size="sm" color="primary" truncate class="category__name">
             {{ child.name }}
           </BaseText>
+
+          <div class="category__move">
+            <button type="button" class="category__action" :disabled="moving || childIndex === 0" :aria-label="`Monter ${child.name}`" @click="move(child, 'up')">
+              <BaseIcon name="chevron" :size="14" class="category__move-icon category__move-icon--up" />
+            </button>
+            <button type="button" class="category__action" :disabled="moving || childIndex === node.children.length - 1" :aria-label="`Descendre ${child.name}`" @click="move(child, 'down')">
+              <BaseIcon name="chevron" :size="14" class="category__move-icon category__move-icon--down" />
+            </button>
+          </div>
 
           <button type="button" class="category__action" :aria-label="`Modifier ${child.name}`" @click="edit(child)">
             <BaseIcon name="tag" :size="16" />
@@ -427,13 +471,31 @@ onMounted(() => categories.fetchAll({ force: true }).catch(() => {}))
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 
-.category__action:hover {
+.category__action:hover:not(:disabled) {
   color: var(--color-primary);
   background: var(--color-primary-subtle);
+}
+
+.category__action:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .category__action--danger:hover {
   color: var(--color-danger);
   background: var(--color-danger-subtle);
 }
+
+.category__move {
+  display: flex;
+  flex-direction: column;
+}
+
+.category__move .category__action {
+  width: 1.5rem;
+  height: 1.25rem;
+}
+
+.category__move-icon--up   { transform: rotate(-90deg); }
+.category__move-icon--down { transform: rotate(90deg); }
 </style>
