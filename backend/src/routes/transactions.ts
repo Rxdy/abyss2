@@ -13,6 +13,7 @@
 
 import { encryptValue, decryptValue } from '../utils/crypto.js'
 import { CATEGORY_USAGE } from './categories.js'
+import { runDueRecurring } from '../utils/recurring.js'
 
 const TITLE_USAGE  = 'transaction-title'
 const AMOUNT_USAGE = 'transaction-amount'
@@ -28,6 +29,7 @@ const transactionSchema = {
     date:   { type: 'string' },
     type:   { type: 'string', enum: TYPES },
     note:   { type: 'string', nullable: true },
+    recurringId: { type: 'string', format: 'uuid', nullable: true, description: 'Renseigné si générée depuis une charge fixe' },
     category: {
       type: 'object',
       nullable: true,
@@ -59,6 +61,7 @@ function toApi(transaction: any) {
     date:   formatDate(transaction.date),
     type:   transaction.type,
     note:   transaction.note,
+    recurringId: transaction.recurringId ?? null,
     category: transaction.category
       ? {
           id:    transaction.category.id,
@@ -112,6 +115,8 @@ export default async function transactionRoutes(fastify: any) {
     },
     preHandler: fastify.authenticate,
   }, async (req: any) => {
+    await runDueRecurring(fastify.prisma, req.user.userId)
+
     const { type, categoryId, from, to, limit = 50, offset = 0 } = req.query
 
     const where: any = { userId: req.user.userId }
@@ -163,6 +168,8 @@ export default async function transactionRoutes(fastify: any) {
     },
     preHandler: fastify.authenticate,
   }, async (req: any) => {
+    await runDueRecurring(fastify.prisma, req.user.userId)
+
     const transactions = await fastify.prisma.transaction.findMany({
       where:   { userId: req.user.userId },
       include: { category: true },
@@ -328,4 +335,4 @@ export default async function transactionRoutes(fastify: any) {
   })
 }
 
-export { TITLE_USAGE, AMOUNT_USAGE }
+export { TITLE_USAGE, AMOUNT_USAGE, assertCategoryOwned }

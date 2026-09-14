@@ -67,8 +67,12 @@ lus par les lecteurs d'écran, jamais des icônes muettes.
 
 | Entrée | Route | Contenu |
 |--------|-------|---------|
-| Accueil | `/` | état des services |
-| Profil | `/profile` | email, date de création, identifiant |
+| Transactions | `/transactions` | liste filtrable (type, catégorie, période) |
+| Accueil | `/` | solde, revenus/dépenses du mois, dernières transactions |
+| Profil | `/profile` | email, date de création, identifiant, réglages |
+
+Depuis Profil : `/profile/categories` (catégories et sous-catégories) et
+`/profile/recurring` (dépenses et revenus fixes mensuels).
 
 Le header contient la marque, la navigation (desktop), la bascule de thème et le
 **bouton de déconnexion**. Ajouter une entrée de navigation = une ligne dans le
@@ -128,7 +132,7 @@ Trois suites, une par service, exécutées dans les conteneurs :
 
 ```bash
 make test          # les trois
-make test-back     # API   — 41 tests
+make test-back     # API   — 118 tests
 make test-front    # front — 95 tests
 make test-db       # base  — 12 tests
 make test-coverage # rapport de couverture front + back
@@ -136,7 +140,7 @@ make test-coverage # rapport de couverture front + back
 
 | Suite | Emplacement | Couvre |
 |-------|-------------|--------|
-| **Back** | `backend/tests/` | crypto (blind index, AES-GCM, altération), `/health`, `/api/db-status`, register (201/409/400, hash bcrypt, aucun email en clair), login (JWT, 401 indifférenciés), `/api/user` (401 sans token, token étranger, utilisateur supprimé). Prisma est mocké : **aucune base requise**. |
+| **Back** | `backend/tests/` | crypto (blind index, AES-GCM, altération), `/health`, `/api/db-status`, register/login/`/api/user`, `/api/categories` (sous-catégories, recatégorisation à la suppression), `/api/transactions` + `/api/summary`, `/api/recurring` (CRUD + calcul pur des échéances dans `recurring-utils.test.ts`). Prisma est mocké : **aucune base requise**. |
 | **Front** | `frontend/tests/` | atoms (`BaseInput`, `BaseButton`, `BaseText`), `ThemeToggle`, `NavItem`, `AppNavbar`, `AppHeader`, stores `auth` et `app`, composable `useApi`, pages `LoginPage`, `HomePage` et `ProfilePage`. `fetch` est mocké. |
 | **BDD** | `backend/tests/db/` | schéma `dbo` réel : colonnes et types, nullabilité, unicité de `email_hash`, index de lookup, trigger `updated_at`, extensions, CRUD Prisma. **Nécessite PostgreSQL démarré.** |
 
@@ -186,12 +190,24 @@ Aucune de ces trois branches n'accepte de commit poussé directement.
 - `useApi()` : fetch + `Authorization: Bearer` automatique + erreurs normalisées
 - Store `auth` en `sessionStorage`, session revalidée au démarrage via `/api/user`
 - Page `LoginPage` : validation, état de chargement, erreurs par champ + globale
+- Tableau de bord (`HomePage`) : solde, revenus/dépenses du mois, dernières
+  transactions, ajout rapide
+- Transactions : liste filtrable (type, catégorie, période), formulaire dépense/revenu
+- Catégories : couleur libre, sous-catégories (1 niveau), réorganisation
+  (monter/descendre), suppression avec confirmation et recatégorisation
+  optionnelle des transactions concernées
+- Dépenses/revenus fixes (`RecurringPage`) : pause/reprise, prochaine échéance affichée
 
 **Back**
 - Factory `buildApp()` séparée de `server.ts` (testable avec Prisma mocké)
 - `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/user` (JWT)
 - Email jamais en clair : blind index HMAC-SHA256 + chiffrement AES-256-GCM
 - bcrypt 12 rounds, JWT 7 jours, Helmet, CORS restreint au front
+- `/api/categories`, `/api/transactions` + `/api/summary` (chiffrés AES-256-GCM,
+  montants en centimes)
+- `/api/recurring` : dépenses/revenus fixes mensuels — un rattrapage
+  (`runDueRecurring`) génère les transactions dues à chaque lecture des
+  transactions/du résumé/de la liste des charges fixes
 - Swagger UI sur `/docs`
 
 ## Dépannage
@@ -213,35 +229,12 @@ sudo sysctl -w fs.inotify.max_user_instances=512   # + /etc/sysctl.d/ pour persi
 
 ## Prochaines étapes
 
-- CI/CD : les trois commandes de test sont prêtes à être branchées (voir
-  ci-dessous)
 - Page d'inscription (`RegisterPage`) + jauge de robustesse du mot de passe
-- Modèle de données des dépenses (comptes, opérations, catégories)
+- Statistiques : répartition des dépenses par catégorie (pourcentages) et
+  comparaison entre périodes
 - Vraies icônes générées depuis [prompt-icone.md](prompt-icone.md)
-- Migrations Prisma versionnées (aujourd'hui : `postgres/init.sql`)
-
-### Pour la CI
-
-Les étapes à enchaîner, sans Docker Compose côté runner :
-
-```yaml
-# back — aucun service requis
-- run: npm ci --prefix backend
-- run: npm test --prefix backend
-
-# front — aucun service requis
-- run: npm ci --prefix frontend
-- run: npm test --prefix frontend
-- run: npm run build --prefix frontend      # vérifie aussi le manifest PWA
-
-# bdd — nécessite un service postgres:15-alpine
-- run: psql "$DATABASE_URL" -f postgres/init.sql
-- run: npx prisma generate --schema backend/prisma/schema.prisma
-- run: npm run test:db --prefix backend
-```
-
-Variables nécessaires : `DATABASE_URL`, `JWT_SECRET`, `MASTER_SECRET` (les deux
-derniers peuvent être des valeurs jetables en CI).
+- Migrations Prisma versionnées (aujourd'hui : `postgres/init.sql`, rejoué à la
+  main sur les bases déjà existantes lors des changements de schéma)
 
 ## Documentation
 
