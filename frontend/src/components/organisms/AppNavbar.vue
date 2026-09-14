@@ -13,9 +13,10 @@ import NavItem from '@/components/molecules/NavItem.vue'
 
 /* L'accueil est volontairement au centre : c'est la destination par défaut. */
 const ROUTES = [
-  { to: '/transactions', icon: 'list', label: 'Transactions' },
-  { to: '/',             icon: 'home', label: 'Accueil'      },
-  { to: '/profile',      icon: 'user', label: 'Profil'       },
+  { to: '/transactions', icon: 'list',  label: 'Transactions' },
+  { to: '/',             icon: 'home',  label: 'Accueil'      },
+  { to: '/stats',        icon: 'chart', label: 'Stats'        },
+  { to: '/profile',      icon: 'user',  label: 'Profil'       },
 ]
 </script>
 

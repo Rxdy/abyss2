@@ -16,6 +16,7 @@ const PATHS = {
   tag:    'M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9ZM7.5 7.5h.01',
   plus:   'M12 5v14M5 12h14',
   chevron:'M9 6l6 6-6 6',
+  chart:  'M4 20V10M10 20V4M16 20v-7M22 20H2',
 }
 
 const props = defineProps({
