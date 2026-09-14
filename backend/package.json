@@ -1,0 +1,39 @@
+{
+  "name": "abyss2-api",
+  "version": "1.0.0",
+  "description": "Fastify API for Abyss2 — Prisma ORM",
+  "type": "module",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "npx prisma generate && tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:db": "vitest run --config vitest.db.config.ts",
+    "db:generate": "npx prisma generate",
+    "db:migrate": "npx prisma migrate dev",
+    "db:deploy": "npx prisma migrate deploy",
+    "db:studio": "npx prisma studio"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.5",
+    "@prisma/client": "^5.10.2",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.8.4",
+    "pino-pretty": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.0",
+    "prisma": "^5.10.2",
+    "tsx": "^4.13.0",
+    "typescript": "^5.5.3",
+    "vitest": "^2.1.8"
+  }
+}

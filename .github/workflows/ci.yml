@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging, dev]
+  pull_request:
+    branches: [main, staging, dev]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  backend-unit:
+    name: Backend — tests unitaires (Prisma mocké)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+        env:
+          MASTER_SECRET: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          JWT_SECRET: ci-test-jwt-secret
+
+  backend-db:
+    name: Backend — tests d'intégration (PostgreSQL réel)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: abyss2_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: abyss2_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U abyss2_user"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Initialiser le schéma (postgres/init.sql)
+        run: PGPASSWORD=ci_password psql -h localhost -U abyss2_user -d abyss2_db -f ../postgres/init.sql
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test:db
+        env:
+          DATABASE_URL: postgresql://abyss2_user:ci_password@localhost:5432/abyss2_db?schema=dbo
+          MASTER_SECRET: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          JWT_SECRET: ci-test-jwt-secret
+
+  frontend:
+    name: Frontend — tests unitaires + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
