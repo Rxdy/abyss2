@@ -15,7 +15,7 @@ const categories   = useCategoriesStore()
 const showForm = ref(false)
 
 async function refresh() {
-  await transactions.fetchSummary()
+  await transactions.fetchSummary().catch(() => {})
 }
 
 function onSaved() {

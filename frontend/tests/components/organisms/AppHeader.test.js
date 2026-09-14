@@ -29,7 +29,7 @@ describe('AppHeader — contenu', () => {
 
     const nav = w.find('nav[aria-label="Navigation principale"]')
     expect(nav.exists()).toBe(true)
-    expect(nav.findAll('a')).toHaveLength(2)
+    expect(nav.findAll('a')).toHaveLength(3)
   })
 
   it('propose la bascule de thème', () => {

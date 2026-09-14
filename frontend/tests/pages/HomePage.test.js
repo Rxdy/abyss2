@@ -1,79 +1,89 @@
 /**
- * Tests page — HomePage (tableau de bord des services)
+ * Tests page — HomePage (tableau de bord budget : solde, revenus/dépenses
+ * du mois, ajout rapide, dernières transactions)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import HomePage from '@/pages/HomePage.vue'
-import { useAuthStore } from '@/stores/auth.store.js'
+import { formatAmount } from '@/utils/format.js'
 
-/** Répond selon l'URL appelée. */
-function mockApi({ health = { status: 'ok' }, db = { status: 'connected', schema: 'dbo' } } = {}) {
+const SUMMARY = {
+  balance: 12345,
+  income: 60000,
+  expense: 47655,
+  monthIncome: 50000,
+  monthExpense: 20000,
+  month: '2026-09',
+  count: 2,
+  recent: [
+    { id: '1', title: 'Salaire', amount: 50000, date: '2026-09-01', type: 'income', note: null, category: null },
+    { id: '2', title: 'Courses', amount: 4500, date: '2026-09-03', type: 'expense', note: null, category: { id: 'c1', name: 'Alimentation', color: '#4ade80' } },
+  ],
+}
+
+/** Répond selon l'URL appelée : résumé du budget, ou liste des catégories. */
+function mockApi({ summary = SUMMARY, categories = [] } = {}) {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
-    const body = url.includes('/api/db-status') ? db : health
+    const body = url.includes('/api/categories') ? categories : summary
     return Promise.resolve({ ok: true, status: 200, json: async () => body })
   }))
 }
 
-function mockServiceWorker(registration) {
-  Object.defineProperty(navigator, 'serviceWorker', {
-    configurable: true,
-    value: { getRegistration: vi.fn().mockResolvedValue(registration) },
-  })
-}
-
 beforeEach(() => {
   vi.unstubAllGlobals()
-  mockServiceWorker({ scope: '/' })
 })
 
 describe('HomePage', () => {
-  it('affiche l\'email de l\'utilisateur connecté', async () => {
-    useAuthStore().setSession({ token: 'jwt', user: { id: '1', email: 'alice@example.com' } })
+  it('affiche le solde et les totaux du mois', async () => {
     mockApi()
 
     const w = mount(HomePage)
     await flushPromises()
 
-    expect(w.text()).toContain('alice@example.com')
+    expect(w.text()).toContain(formatAmount(SUMMARY.balance))
+    expect(w.text()).toContain(formatAmount(SUMMARY.monthIncome))
+    expect(w.text()).toContain(formatAmount(SUMMARY.monthExpense))
   })
 
-  it('liste les trois services suivis', () => {
-    mockApi()
-    const w = mount(HomePage)
-
-    expect(w.findAll('.service-card')).toHaveLength(3)
-    expect(w.text()).toContain('API Fastify')
-    expect(w.text()).toContain('PostgreSQL')
-    expect(w.text()).toContain('Service Worker')
-  })
-
-  it('passe les services au vert quand tout répond', async () => {
-    mockApi()
-    const w = mount(HomePage)
-    await flushPromises()
-
-    expect(w.findAll('.service-card__dot--ok')).toHaveLength(3)
-    expect(w.text()).toContain('connected · schéma dbo')
-  })
-
-  it('signale l\'API en rouge quand elle échoue', async () => {
+  it('signale une erreur si le résumé ne charge pas', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')))
 
     const w = mount(HomePage)
     await flushPromises()
 
-    expect(w.findAll('.service-card__dot--ko').length).toBeGreaterThanOrEqual(2)
-    expect(w.text()).toContain('Failed to fetch')
+    expect(w.find('[role="alert"]').text()).toContain('Failed to fetch')
   })
 
-  it('signale l\'absence de service worker', async () => {
+  it('liste les dernières transactions du résumé', async () => {
     mockApi()
-    mockServiceWorker(undefined)
 
     const w = mount(HomePage)
     await flushPromises()
 
-    expect(w.text()).toContain('aucun service worker actif')
+    expect(w.text()).toContain('Salaire')
+    expect(w.text()).toContain('Courses')
+  })
+
+  it('affiche un message quand il n\'y a aucune transaction récente', async () => {
+    mockApi({ summary: { ...SUMMARY, recent: [] } })
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.text()).toContain('Aucune transaction — commencez par en ajouter une.')
+  })
+
+  it('ouvre le formulaire d\'ajout au clic sur le bouton', async () => {
+    mockApi()
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.find('#transaction-title').exists()).toBe(false)
+
+    await w.find('button').trigger('click')
+
+    expect(w.find('#transaction-title').exists()).toBe(true)
   })
 })
