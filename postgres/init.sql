@@ -35,9 +35,13 @@ CREATE TABLE IF NOT EXISTS dbo.users (
   auth_salt       VARCHAR(32) NOT NULL,          -- 16 bytes hex (pour hash password)
   key_salt        VARCHAR(32) NOT NULL,          -- 16 bytes hex (pour dérivation clé)
   key_fragment    VARCHAR(64) NOT NULL,          -- 32 bytes hex (split-key fragment)
+  token_version   INTEGER     NOT NULL DEFAULT 0, -- incrémenté → invalide tous les JWT déjà émis
   created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Ajout rétroactif (bases créées avant la déconnexion multi-appareils).
+ALTER TABLE dbo.users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
 
 DROP TRIGGER IF EXISTS trg_users_updated_at ON dbo.users;
 CREATE TRIGGER trg_users_updated_at
