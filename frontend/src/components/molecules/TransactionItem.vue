@@ -34,14 +34,15 @@ defineEmits(['select'])
         <BaseIcon
           v-if="transaction.recurringId"
           name="clock"
-          :size="12"
+          :size="13"
           class="transaction__recurring-badge"
-          title="Générée automatiquement depuis une charge fixe"
+          title="Dépense/revenu fixe — générée automatiquement"
         />
       </span>
       <BaseText size="xs" color="muted">
         {{ formatShortDate(transaction.date) }}
         <template v-if="transaction.category"> · {{ transaction.category.name }}</template>
+        <template v-if="transaction.recurringId"> · Fixe</template>
       </BaseText>
     </div>
 
@@ -102,7 +103,7 @@ defineEmits(['select'])
 
 .transaction__recurring-badge {
   flex-shrink: 0;
-  color: var(--color-text-muted);
+  color: var(--color-primary);
 }
 
 .transaction__amount {
