@@ -9,7 +9,7 @@ const currency = new Intl.NumberFormat('fr-FR', {
 })
 
 const longDate  = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
-const shortDate = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' })
+const shortDate = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
 
 /** 4250 → "42,50 €" */
 export function formatAmount(cents) {
