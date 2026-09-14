@@ -36,6 +36,12 @@ const routes = [
     component: () => import('@/pages/CategoriesPage.vue'),
     meta: { layout: 'default', title: 'Catégories', requiresAuth: true }
   },
+  {
+    path: '/profile/recurring',
+    name: 'recurring',
+    component: () => import('@/pages/RecurringPage.vue'),
+    meta: { layout: 'default', title: 'Charges fixes', requiresAuth: true }
+  },
 
   // ── 404 ───────────────────────────────────────────────────
   {

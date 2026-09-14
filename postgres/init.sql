@@ -96,6 +96,39 @@ CREATE TRIGGER trg_transactions_updated_at
   BEFORE UPDATE ON dbo.transactions
   FOR EACH ROW EXECUTE FUNCTION dbo.set_updated_at();
 
+-- ============================================================
+-- Table: dbo.recurring_transactions
+-- Dépense / revenu fixe mensuel — génère des transactions normales
+-- (voir backend/src/utils/recurring.ts).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dbo.recurring_transactions (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id               UUID NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+  category_id           UUID REFERENCES dbo.categories(id) ON DELETE SET NULL,
+  title_encrypted       TEXT        NOT NULL,
+  amount_encrypted      TEXT        NOT NULL,
+  type                  VARCHAR(20) NOT NULL DEFAULT 'expense',
+  day_of_month          INTEGER     NOT NULL,
+  note                  TEXT,
+  active                BOOLEAN     NOT NULL DEFAULT true,
+  start_date            DATE        NOT NULL,
+  end_date              DATE,
+  last_generated_month  VARCHAR(7),
+  created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS trg_recurring_transactions_updated_at ON dbo.recurring_transactions;
+CREATE TRIGGER trg_recurring_transactions_updated_at
+  BEFORE UPDATE ON dbo.recurring_transactions
+  FOR EACH ROW EXECUTE FUNCTION dbo.set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_recurring_transactions_user_id ON dbo.recurring_transactions(user_id);
+
+-- Lien facultatif transaction ↔ modèle récurrent dont elle est issue.
+ALTER TABLE dbo.transactions ADD COLUMN IF NOT EXISTS recurring_id UUID REFERENCES dbo.recurring_transactions(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id      ON dbo.transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date    ON dbo.transactions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_transactions_category_id  ON dbo.transactions(category_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_recurring_id ON dbo.transactions(recurring_id);

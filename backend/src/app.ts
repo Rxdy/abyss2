@@ -78,6 +78,7 @@ export async function buildApp(opts: { testing?: boolean; prisma?: any } = {}) {
           { name: 'user',         description: 'Profil utilisateur' },
           { name: 'categories',   description: 'Catégories de dépenses' },
           { name: 'transactions', description: 'Transactions et récapitulatif' },
+          { name: 'recurring',    description: 'Dépenses et revenus fixes mensuels' },
         ],
       },
     })
@@ -102,6 +103,7 @@ export async function buildApp(opts: { testing?: boolean; prisma?: any } = {}) {
   fastify.register(import('./routes/user.js'))
   fastify.register(import('./routes/categories.js'))
   fastify.register(import('./routes/transactions.js'))
+  fastify.register(import('./routes/recurring.js'))
 
   fastify.get('/health', {
     schema: {
