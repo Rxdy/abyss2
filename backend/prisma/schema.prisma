@@ -1,0 +1,90 @@
+// Prisma schema — Abyss2
+// Source de vérité pour la base de données
+// Schéma PostgreSQL: dbo
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["dbo"]
+}
+
+// ============================================================
+// Model: User
+// ============================================================
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  emailHash      String   @unique @map("email_hash") @db.VarChar(64)  // HMAC-SHA256 — blind index pour lookup
+  emailEncrypted String   @map("email_encrypted") @db.Text            // AES-256-GCM — pour affichage
+  passwordHash   String   @map("password_hash") @db.Text
+  authSalt       String   @map("auth_salt") @db.VarChar(32)           // 16 bytes hex — pour hash password
+  keySalt        String   @map("key_salt") @db.VarChar(32)            // 16 bytes hex — pour dérivation de clé
+  keyFragment    String   @map("key_fragment") @db.VarChar(64)        // 32 bytes hex — split-key fragment
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  categories     Category[]
+  transactions   Transaction[]
+
+  @@map("users")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: Category — libellé chiffré, couleur en clair (affichage)
+//
+// Sous-catégories : une seule profondeur (parentId → catégorie de premier
+// niveau uniquement). Si la catégorie parente est supprimée, ses enfants
+// sont conservés et simplement promus en catégories de premier niveau
+// (parentId → NULL) : on ne perd jamais de structure silencieusement.
+// ============================================================
+model Category {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  parentId      String?  @map("parent_id") @db.Uuid
+  nameEncrypted String   @map("name_encrypted") @db.Text
+  color         String?  @db.VarChar(7)   // #RRGGBB — non chiffré, sert au rendu
+  position      Int?     @db.Integer
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent        Category?     @relation("CategorySubcategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Category[]    @relation("CategorySubcategories")
+  transactions  Transaction[]
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("categories")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: Transaction — libellé et montant chiffrés (AES-256-GCM)
+// Le montant est stocké en centimes, sérialisé puis chiffré.
+// ============================================================
+model Transaction {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  categoryId      String?  @map("category_id") @db.Uuid
+  titleEncrypted  String   @map("title_encrypted") @db.Text
+  amountEncrypted String   @map("amount_encrypted") @db.Text
+  date            DateTime @db.Date
+  type            String   @default("expense") @db.VarChar(20)  // 'expense' | 'income'
+  note            String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, date])
+  @@index([categoryId])
+  @@map("transactions")
+  @@schema("dbo")
+}

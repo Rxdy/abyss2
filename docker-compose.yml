@@ -1,0 +1,82 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    container_name: abyss2_postgres
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - abyss2_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Fastify API Backend
+  api:
+    container_name: abyss2_api
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?schema=dbo
+      FRONTEND_URL: http://localhost:5174
+      JWT_SECRET: ${JWT_SECRET}
+      MASTER_SECRET: ${MASTER_SECRET}
+      API_PORT: 3000
+      # Watchers en polling : les instances inotify de l'hôte sont une ressource
+      # partagée et vite saturée quand plusieurs projets tournent (EMFILE).
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "600"
+    ports:
+      - "3002:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+      - ./backend/tests:/app/tests
+      - ./backend/vitest.config.ts:/app/vitest.config.ts
+      - ./backend/vitest.db.config.ts:/app/vitest.db.config.ts
+    networks:
+      - abyss2_network
+
+  # Vue.js Frontend
+  frontend:
+    container_name: abyss2_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:3002
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "600"
+    ports:
+      - "5174:5173"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/tests:/app/tests
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    networks:
+      - abyss2_network
+
+volumes:
+  postgres_data:
+
+networks:
+  abyss2_network:
+    driver: bridge
