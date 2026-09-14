@@ -3,9 +3,10 @@ import { onMounted, ref } from 'vue'
 import BaseText   from '@/components/atoms/BaseText.vue'
 import BaseButton from '@/components/atoms/BaseButton.vue'
 import BaseIcon   from '@/components/atoms/BaseIcon.vue'
-import TransactionList   from '@/components/organisms/TransactionList.vue'
-import TransactionForm   from '@/components/organisms/TransactionForm.vue'
-import TransactionDetail from '@/components/organisms/TransactionDetail.vue'
+import TransactionList    from '@/components/organisms/TransactionList.vue'
+import TransactionForm    from '@/components/organisms/TransactionForm.vue'
+import TransactionDetail  from '@/components/organisms/TransactionDetail.vue'
+import DateRangePicker    from '@/components/molecules/DateRangePicker.vue'
 import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
 import { formatAmount } from '@/utils/format.js'
@@ -42,20 +43,71 @@ onMounted(() => {
 
 <template>
   <section class="transactions">
-    <header class="transactions__head">
-      <div>
-        <BaseText as="h1" size="2xl" weight="bold" color="primary">Transactions</BaseText>
-        <BaseText as="p" size="sm" color="muted">
-          {{ transactions.total }}
-          {{ transactions.total > 1 ? 'opérations' : 'opération' }}
-        </BaseText>
-      </div>
+    <!-- Fixe : titre, bouton d'ajout et filtres — seules les cartes défilent en dessous. -->
+    <div class="transactions__sticky">
+      <header class="transactions__head">
+        <div>
+          <BaseText as="h1" size="2xl" weight="bold" color="primary">Transactions</BaseText>
+          <BaseText as="p" size="sm" color="muted">
+            {{ transactions.total }}
+            {{ transactions.total > 1 ? 'opérations' : 'opération' }}
+          </BaseText>
+        </div>
 
-      <BaseButton v-if="!showForm" variant="primary" @click="openCreate">
-        <BaseIcon name="plus" :size="18" />
-        Ajouter
-      </BaseButton>
-    </header>
+        <BaseButton v-if="!showForm" variant="primary" @click="openCreate">
+          <BaseIcon name="plus" :size="18" />
+          Ajouter
+        </BaseButton>
+      </header>
+
+      <div class="filters">
+        <div class="filters__group" role="group" aria-label="Filtrer par type">
+          <button
+            v-for="option in [
+              { value: '',        label: 'Tout'     },
+              { value: 'expense', label: 'Dépenses' },
+              { value: 'income',  label: 'Revenus'  },
+            ]"
+            :key="option.value"
+            type="button"
+            class="filters__chip"
+            :class="{ 'filters__chip--active': transactions.filters.type === option.value }"
+            :aria-pressed="transactions.filters.type === option.value"
+            @click="transactions.setFilter('type', option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
+        <select
+          :value="transactions.filters.categoryId"
+          class="filters__select"
+          aria-label="Filtrer par catégorie"
+          @change="transactions.setFilter('categoryId', $event.target.value)"
+        >
+          <option value="">Toutes les catégories</option>
+          <option value="none">Sans catégorie</option>
+          <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
+            {{ category.label }}
+          </option>
+        </select>
+
+        <DateRangePicker
+          :from="transactions.filters.from"
+          :to="transactions.filters.to"
+          @change="transactions.setDateRange($event)"
+        />
+
+        <button
+          v-if="transactions.hasFilters"
+          type="button"
+          class="filters__reset"
+          @click="transactions.resetFilters()"
+        >
+          Réinitialiser
+        </button>
+      </div>
+    </div>
 
     <TransactionForm
       v-if="showForm"
@@ -64,69 +116,6 @@ onMounted(() => {
       @deleted="transactions.fetchAll()"
       @close="closeForm"
     />
-
-    <!-- Filtres -->
-    <div class="filters">
-      <div class="filters__group" role="group" aria-label="Filtrer par type">
-        <button
-          v-for="option in [
-            { value: '',        label: 'Tout'     },
-            { value: 'expense', label: 'Dépenses' },
-            { value: 'income',  label: 'Revenus'  },
-          ]"
-          :key="option.value"
-          type="button"
-          class="filters__chip"
-          :class="{ 'filters__chip--active': transactions.filters.type === option.value }"
-          :aria-pressed="transactions.filters.type === option.value"
-          @click="transactions.setFilter('type', option.value)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-
-      <select
-        :value="transactions.filters.categoryId"
-        class="filters__select"
-        aria-label="Filtrer par catégorie"
-        @change="transactions.setFilter('categoryId', $event.target.value)"
-      >
-        <option value="">Toutes les catégories</option>
-        <option value="none">Sans catégorie</option>
-        <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
-          {{ category.label }}
-        </option>
-      </select>
-
-      <div class="filters__dates">
-        <input
-          type="date"
-          :value="transactions.filters.from"
-          class="filters__date"
-          aria-label="Depuis le"
-          :max="transactions.filters.to || undefined"
-          @change="transactions.setFilter('from', $event.target.value)"
-        />
-        <BaseText size="sm" color="muted">→</BaseText>
-        <input
-          type="date"
-          :value="transactions.filters.to"
-          class="filters__date"
-          aria-label="Jusqu'au"
-          :min="transactions.filters.from || undefined"
-          @change="transactions.setFilter('to', $event.target.value)"
-        />
-      </div>
-
-      <button
-        v-if="transactions.hasFilters"
-        type="button"
-        class="filters__reset"
-        @click="transactions.resetFilters()"
-      >
-        Réinitialiser
-      </button>
-    </div>
 
     <div v-if="transactions.error" class="transactions__error" role="alert">
       <BaseText size="sm" color="danger">{{ transactions.error }}</BaseText>
@@ -164,6 +153,18 @@ onMounted(() => {
   max-width: 42rem;
   margin: 0 auto;
   width: 100%;
+}
+
+.transactions__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-3);
+  background: var(--color-bg-base);
 }
 
 .transactions__head {
@@ -213,22 +214,6 @@ onMounted(() => {
 .filters__select {
   flex: 1;
   min-width: 10rem;
-  min-height: 2.25rem;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
-}
-
-.filters__dates {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.filters__date {
   min-height: 2.25rem;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
