@@ -74,6 +74,13 @@ export const useTransactionsStore = defineStore('transactions', {
       return this.fetchAll()
     },
 
+    /** Change from/to en un seul appel (évite un fetch par borne changée). */
+    setDateRange({ from = '', to = '' } = {}) {
+      this.filters.from = from
+      this.filters.to   = to
+      return this.fetchAll()
+    },
+
     resetFilters() {
       this.filters = { type: '', categoryId: '', from: '', to: '' }
       return this.fetchAll()
