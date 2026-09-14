@@ -54,8 +54,13 @@ beforeEach(async () => {
       update:    vi.fn(),
       delete:    vi.fn(),
     },
+    recurringTransaction: {
+      findMany: vi.fn().mockResolvedValue([]),
+      update:   vi.fn(),
+    },
     $disconnect: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $transaction: vi.fn((fn: any) => fn(mockPrisma)),
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
@@ -90,6 +95,7 @@ describe('GET /api/transactions', () => {
         date: '2026-09-05',
         type: 'expense',
         note: null,
+        recurringId: null,
         category: { id: CAT_ID, name: 'Courses', color: '#4ade80' },
       }],
     })

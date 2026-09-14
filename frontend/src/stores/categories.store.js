@@ -68,5 +68,20 @@ export const useCategoriesStore = defineStore('categories', {
       await useApi().del(`/api/categories/${id}`, { reassignTo })
       await this.fetchAll({ force: true })
     },
+
+    /**
+     * Réordonne un groupe de catégories (catégories de premier niveau, ou
+     * sous-catégories d'un même parent) : `orderedList` est ce groupe dans
+     * son nouvel ordre. On ne persiste que les positions qui changent
+     * réellement, puis on recharge pour refléter l'ordre final.
+     */
+    async reorder(orderedList) {
+      const changed = orderedList
+        .map((category, position) => ({ category, position }))
+        .filter(({ category, position }) => category.position !== position)
+
+      await Promise.all(changed.map(({ category, position }) => this.update(category.id, { position })))
+      await this.fetchAll({ force: true })
+    },
   },
 })

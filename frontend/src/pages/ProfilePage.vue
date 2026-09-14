@@ -93,6 +93,15 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
+
+      <RouterLink to="/profile/recurring" class="profile__setting">
+        <BaseIcon name="clock" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Dépenses &amp; revenus fixes</BaseText>
+          <BaseText size="xs" color="muted">Loyer, salaire, abonnements…</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
     </nav>
 
     <div class="profile__actions">
