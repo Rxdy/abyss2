@@ -10,6 +10,7 @@ beforeAll(() => {
   process.env.JWT_SECRET    = 'test-jwt-secret'
 })
 
+const bcrypt = (await import('bcryptjs')).default
 const { encryptEmail } = await import('../src/utils/crypto.js')
 
 let app: any
@@ -18,7 +19,7 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user: { findUnique: vi.fn(), create: vi.fn() },
+    user: { findUnique: vi.fn(), create: vi.fn(), delete: vi.fn() },
     $disconnect: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
   }
@@ -101,5 +102,44 @@ describe('GET /api/user', () => {
 
     expect(res.statusCode).toBe(401)
     expect(res.json().code).toBe('USER_NOT_FOUND')
+  })
+})
+
+describe('DELETE /api/user', () => {
+  const del = (payload: any, headers: Record<string, string> = {}) =>
+    app.inject({ method: 'DELETE', url: '/api/user', payload, headers })
+
+  it('200 — supprime le compte quand le mot de passe est correct', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'uuid-test-user',
+      passwordHash: await bcrypt.hash('correct-horse', 4),
+    })
+    mockPrisma.user.delete.mockResolvedValue({ id: 'uuid-test-user' })
+
+    const res = await del({ password: 'correct-horse' }, { authorization: `Bearer ${token}` })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ deleted: true })
+    expect(mockPrisma.user.delete).toHaveBeenCalledWith({ where: { id: 'uuid-test-user' } })
+  })
+
+  it('401 — mauvais mot de passe, ne supprime rien', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'uuid-test-user',
+      passwordHash: await bcrypt.hash('correct-horse', 4),
+    })
+
+    const res = await del({ password: 'wrong' }, { authorization: `Bearer ${token}` })
+
+    expect(res.statusCode).toBe(401)
+    expect(res.json().code).toBe('INVALID_CREDENTIALS')
+    expect(mockPrisma.user.delete).not.toHaveBeenCalled()
+  })
+
+  it('401 — sans token', async () => {
+    const res = await del({ password: 'whatever' })
+
+    expect(res.statusCode).toBe(401)
+    expect(mockPrisma.user.delete).not.toHaveBeenCalled()
   })
 })
