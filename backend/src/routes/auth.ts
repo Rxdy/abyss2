@@ -158,6 +158,7 @@ export default async function authRoutes(fastify: any) {
         id:             true,
         emailEncrypted: true,
         passwordHash:   true,
+        tokenVersion:   true,
       },
     })
 
@@ -180,7 +181,7 @@ export default async function authRoutes(fastify: any) {
     const decryptedEmail = decryptEmail(user.emailEncrypted)
 
     const token = fastify.jwt.sign(
-      { userId: user.id, email: decryptedEmail },
+      { userId: user.id, email: decryptedEmail, tv: user.tokenVersion },
       { expiresIn: '7d' }
     )
 
@@ -190,3 +191,5 @@ export default async function authRoutes(fastify: any) {
     })
   })
 }
+
+export { BCRYPT_ROUNDS }

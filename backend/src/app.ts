@@ -47,6 +47,13 @@ export async function buildApp(opts: { testing?: boolean; prisma?: any } = {}) {
   })
 
   // Garde JWT réutilisable : `preHandler: fastify.authenticate`
+  //
+  // Les jetons signés avec un `tv` (tokenVersion, voir POST
+  // /api/user/revoke-sessions et PUT /api/user/password) sont en plus
+  // comparés à la version courante en base : incrémenter tokenVersion
+  // invalide donc immédiatement tous les jetons déjà émis. Les jetons sans
+  // `tv` (anciens clients, tests) ne déclenchent aucune vérification
+  // supplémentaire — rétrocompatible, sans coût pour les tests existants.
   fastify.decorate('authenticate', async (req: any, reply: any) => {
     try {
       await req.jwtVerify()
@@ -55,6 +62,20 @@ export async function buildApp(opts: { testing?: boolean; prisma?: any } = {}) {
         error: 'Token manquant ou invalide.',
         code:  'UNAUTHORIZED',
       })
+    }
+
+    if (req.user?.tv !== undefined) {
+      const current = await fastify.prisma.user.findUnique({
+        where:  { id: req.user.userId },
+        select: { tokenVersion: true },
+      })
+
+      if (!current || current.tokenVersion !== req.user.tv) {
+        return reply.code(401).send({
+          error: 'Session expirée — reconnectez-vous.',
+          code:  'TOKEN_REVOKED',
+        })
+      }
     }
   })
 
