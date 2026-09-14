@@ -3,9 +3,11 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi.js'
 import { useAuthStore } from '@/stores/auth.store.js'
-import BaseText   from '@/components/atoms/BaseText.vue'
-import BaseButton from '@/components/atoms/BaseButton.vue'
-import BaseIcon   from '@/components/atoms/BaseIcon.vue'
+import BaseText      from '@/components/atoms/BaseText.vue'
+import BaseButton    from '@/components/atoms/BaseButton.vue'
+import BaseIcon      from '@/components/atoms/BaseIcon.vue'
+import BaseInput     from '@/components/atoms/BaseInput.vue'
+import ConfirmDialog from '@/components/molecules/ConfirmDialog.vue'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -13,6 +15,37 @@ const api    = useApi()
 
 const profile = ref(null)
 const error   = ref('')
+
+// ── Suppression définitive du compte (droit à l'effacement) ──────────────
+const showDeleteAccount = ref(false)
+const deletePassword    = ref('')
+const deleteError       = ref('')
+const deleteLoading     = ref(false)
+
+function askDeleteAccount() {
+  showDeleteAccount.value = true
+  deletePassword.value = ''
+  deleteError.value = ''
+}
+
+async function confirmDeleteAccount() {
+  if (!deletePassword.value) {
+    deleteError.value = 'Le mot de passe est requis.'
+    return
+  }
+
+  deleteLoading.value = true
+  deleteError.value = ''
+  try {
+    await api.del('/api/user', { password: deletePassword.value })
+    auth.logout()
+    router.push({ name: 'login' })
+  } catch (err) {
+    deleteError.value = err.message
+  } finally {
+    deleteLoading.value = false
+  }
+}
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
 
@@ -113,6 +146,44 @@ onMounted(loadProfile)
         La session n'est gardée que dans cet onglet.
       </BaseText>
     </div>
+
+    <!-- Zone de danger -->
+    <div class="profile__danger">
+      <BaseText as="h2" size="sm" weight="semibold" color="danger">Zone de danger</BaseText>
+      <BaseText size="xs" color="muted">
+        Supprime définitivement le compte ainsi que toutes les données
+        associées (transactions, catégories, charges fixes). Aucune trace
+        n'est conservée, l'opération est irréversible.
+      </BaseText>
+      <BaseButton variant="danger" full @click="askDeleteAccount">
+        Supprimer mon compte
+      </BaseButton>
+    </div>
+
+    <ConfirmDialog
+      v-if="showDeleteAccount"
+      title="Supprimer définitivement votre compte ?"
+      confirm-label="Supprimer définitivement"
+      danger
+      :loading="deleteLoading"
+      @cancel="showDeleteAccount = false"
+      @confirm="confirmDeleteAccount"
+    >
+      <BaseText size="sm" color="secondary">
+        Cette action est irréversible : votre compte, vos transactions, vos
+        catégories et vos charges fixes seront supprimés définitivement,
+        sans aucune trace conservée.
+      </BaseText>
+
+      <BaseInput
+        v-model="deletePassword"
+        id="delete-account-password"
+        type="password"
+        label="Confirmez avec votre mot de passe"
+        :error="deleteError"
+        required
+      />
+    </ConfirmDialog>
   </section>
 </template>
 
@@ -191,5 +262,15 @@ onMounted(loadProfile)
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
+}
+
+.profile__danger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  background: var(--color-danger-subtle);
+  border-radius: var(--radius-lg);
 }
 </style>
