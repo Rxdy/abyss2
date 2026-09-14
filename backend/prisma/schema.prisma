@@ -24,6 +24,7 @@ model User {
   authSalt       String   @map("auth_salt") @db.VarChar(32)           // 16 bytes hex — pour hash password
   keySalt        String   @map("key_salt") @db.VarChar(32)            // 16 bytes hex — pour dérivation de clé
   keyFragment    String   @map("key_fragment") @db.VarChar(64)        // 32 bytes hex — split-key fragment
+  tokenVersion   Int      @default(0) @map("token_version")          // incrémenté → invalide tous les JWT déjà émis
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 

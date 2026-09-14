@@ -47,6 +47,72 @@ async function confirmDeleteAccount() {
   }
 }
 
+// ── Changement de mot de passe ────────────────────────────────────────────
+const passwordForm    = ref({ current: '', next: '', confirm: '' })
+const passwordErrors  = ref({ current: '', next: '', confirm: '', global: '' })
+const passwordLoading = ref(false)
+const passwordSuccess = ref('')
+
+function resetPasswordForm() {
+  passwordForm.value = { current: '', next: '', confirm: '' }
+  passwordErrors.value = { current: '', next: '', confirm: '', global: '' }
+}
+
+async function submitPasswordChange() {
+  passwordErrors.value = { current: '', next: '', confirm: '', global: '' }
+  passwordSuccess.value = ''
+  let ok = true
+
+  if (!passwordForm.value.current) {
+    passwordErrors.value.current = 'Requis.'
+    ok = false
+  }
+  if (passwordForm.value.next.length < 8) {
+    passwordErrors.value.next = '8 caractères minimum.'
+    ok = false
+  }
+  if (passwordForm.value.confirm !== passwordForm.value.next) {
+    passwordErrors.value.confirm = 'Ne correspond pas au nouveau mot de passe.'
+    ok = false
+  }
+  if (!ok) return
+
+  passwordLoading.value = true
+  try {
+    const { token } = await api.put('/api/user/password', {
+      currentPassword: passwordForm.value.current,
+      newPassword: passwordForm.value.next,
+    })
+    auth.setToken(token)
+    passwordSuccess.value = 'Mot de passe modifié. Vos autres appareils ont été déconnectés.'
+    resetPasswordForm()
+  } catch (err) {
+    passwordErrors.value.global = err.message
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
+// ── Déconnexion des autres appareils ──────────────────────────────────────
+const devicesLoading = ref(false)
+const devicesMessage = ref('')
+const devicesError   = ref('')
+
+async function revokeOtherDevices() {
+  devicesLoading.value = true
+  devicesMessage.value = ''
+  devicesError.value = ''
+  try {
+    const { token } = await api.post('/api/user/revoke-sessions')
+    auth.setToken(token)
+    devicesMessage.value = 'Tous les autres appareils ont été déconnectés.'
+  } catch (err) {
+    devicesError.value = err.message
+  } finally {
+    devicesLoading.value = false
+  }
+}
+
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
 
 function formatDate(value) {
@@ -137,8 +203,72 @@ onMounted(loadProfile)
       </RouterLink>
     </nav>
 
+    <!-- Sécurité : mot de passe -->
+    <section class="profile__section">
+      <BaseText as="h2" size="sm" weight="semibold" color="primary">Mot de passe</BaseText>
+
+      <div v-if="passwordErrors.global" class="profile__error" role="alert">
+        <BaseText size="sm" color="danger">{{ passwordErrors.global }}</BaseText>
+      </div>
+      <div v-if="passwordSuccess" class="profile__success" role="status">
+        <BaseText size="sm" color="success">{{ passwordSuccess }}</BaseText>
+      </div>
+
+      <form class="profile__form" novalidate @submit.prevent="submitPasswordChange">
+        <BaseInput
+          v-model="passwordForm.current"
+          id="password-current"
+          type="password"
+          label="Mot de passe actuel"
+          :error="passwordErrors.current"
+          required
+        />
+        <BaseInput
+          v-model="passwordForm.next"
+          id="password-next"
+          type="password"
+          label="Nouveau mot de passe"
+          hint="8 caractères minimum."
+          :error="passwordErrors.next"
+          required
+        />
+        <BaseInput
+          v-model="passwordForm.confirm"
+          id="password-confirm"
+          type="password"
+          label="Confirmer le nouveau mot de passe"
+          :error="passwordErrors.confirm"
+          required
+        />
+        <BaseButton type="submit" variant="secondary" :loading="passwordLoading" full>
+          Changer le mot de passe
+        </BaseButton>
+      </form>
+    </section>
+
+    <!-- Sécurité : appareils -->
+    <section class="profile__section">
+      <BaseText as="h2" size="sm" weight="semibold" color="primary">Appareils connectés</BaseText>
+      <BaseText size="xs" color="muted">
+        Changer le mot de passe déconnecte déjà automatiquement les autres
+        appareils. Utile aussi si une session est restée ouverte ailleurs.
+      </BaseText>
+
+      <div v-if="devicesError" class="profile__error" role="alert">
+        <BaseText size="sm" color="danger">{{ devicesError }}</BaseText>
+      </div>
+      <div v-if="devicesMessage" class="profile__success" role="status">
+        <BaseText size="sm" color="success">{{ devicesMessage }}</BaseText>
+      </div>
+
+      <BaseButton variant="secondary" :loading="devicesLoading" full @click="revokeOtherDevices">
+        <BaseIcon name="devices" :size="18" />
+        Déconnecter tous les autres appareils
+      </BaseButton>
+    </section>
+
     <div class="profile__actions">
-      <BaseButton variant="danger" full @click="logout">
+      <BaseButton class="profile__logout" variant="danger" full @click="logout">
         <BaseIcon name="logout" :size="18" />
         Se déconnecter
       </BaseButton>
@@ -202,6 +332,29 @@ onMounted(loadProfile)
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
+}
+
+.profile__success {
+  background: var(--color-success-subtle);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.profile__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.profile__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .profile__list {

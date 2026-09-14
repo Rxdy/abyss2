@@ -66,7 +66,7 @@ describe('ProfilePage — déconnexion', () => {
     const w = mount(ProfilePage)
     await flushPromises()
 
-    expect(w.find('button').text()).toContain('Se déconnecter')
+    expect(w.find('.profile__logout').text()).toContain('Se déconnecter')
   })
 
   it('vide la session au clic', async () => {
@@ -75,7 +75,7 @@ describe('ProfilePage — déconnexion', () => {
 
     const w = mount(ProfilePage)
     await flushPromises()
-    await w.find('button').trigger('click')
+    await w.find('.profile__logout').trigger('click')
 
     expect(auth.isAuthenticated).toBe(false)
     expect(auth.token).toBeNull()
@@ -88,7 +88,7 @@ describe('ProfilePage — déconnexion', () => {
 
     const w = mount(ProfilePage)
     await flushPromises()
-    await w.find('button').trigger('click')
+    await w.find('.profile__logout').trigger('click')
 
     expect(push).toHaveBeenCalledWith({ name: 'login' })
   })

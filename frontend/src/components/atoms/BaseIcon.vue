@@ -17,6 +17,8 @@ const PATHS = {
   plus:   'M12 5v14M5 12h14',
   chevron:'M9 6l6 6-6 6',
   chart:  'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  calendar: 'M7 3v3M17 3v3M3.5 8.5h17M4 6h16a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z',
+  devices: 'M4 4h12v9H4z M8 20h4 M9 17v3 M18 10h3v7h-3z',
 }
 
 const props = defineProps({

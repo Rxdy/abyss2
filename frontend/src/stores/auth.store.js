@@ -33,6 +33,12 @@ export const useAuthStore = defineStore('auth', {
       sessionStorage.setItem(USER_KEY, JSON.stringify(this.user))
     },
 
+    /** Remplace juste le jeton (mot de passe changé, autres appareils déconnectés) — garde la session ouverte. */
+    setToken(token) {
+      this.token = token
+      sessionStorage.setItem(TOKEN_KEY, token)
+    },
+
     logout() {
       this.token = null
       this.user  = null

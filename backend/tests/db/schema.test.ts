@@ -76,10 +76,12 @@ describe('table dbo.users', () => {
 
     expect(Object.keys(columns).sort()).toEqual([
       'auth_salt', 'created_at', 'email_encrypted', 'email_hash',
-      'id', 'key_fragment', 'key_salt', 'password_hash', 'updated_at',
+      'id', 'key_fragment', 'key_salt', 'password_hash', 'token_version', 'updated_at',
     ])
 
     expect(columns.id.data_type).toBe('uuid')
+    expect(columns.token_version.data_type).toBe('integer')
+    expect(columns.token_version.is_nullable).toBe('NO')
     expect(columns.email_hash.data_type).toBe('character varying')
     expect(columns.email_encrypted.data_type).toBe('text')
     expect(columns.password_hash.data_type).toBe('text')
