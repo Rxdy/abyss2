@@ -20,14 +20,15 @@ describe('AppNavbar', () => {
     expect(w.attributes('aria-label')).toBe('Navigation principale')
   })
 
-  it('propose Transactions, Accueil et Profil', () => {
+  it('propose Transactions, Accueil, Stats et Profil', () => {
     const w = mount(AppNavbar)
     const links = w.findAll('a')
 
-    expect(links).toHaveLength(3)
-    expect(links.map((l) => l.attributes('href'))).toEqual(['/transactions', '/', '/profile'])
+    expect(links).toHaveLength(4)
+    expect(links.map((l) => l.attributes('href'))).toEqual(['/transactions', '/', '/stats', '/profile'])
     expect(w.text()).toContain('Transactions')
     expect(w.text()).toContain('Accueil')
+    expect(w.text()).toContain('Stats')
     expect(w.text()).toContain('Profil')
   })
 

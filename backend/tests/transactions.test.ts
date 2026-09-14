@@ -121,6 +121,13 @@ describe('GET /api/transactions', () => {
     expect(where.date.lte).toEqual(new Date('2026-09-30'))
   })
 
+  it('categoryId=none filtre les transactions sans catégorie', async () => {
+    await app.inject({ method: 'GET', url: '/api/transactions?categoryId=none', headers: auth() })
+
+    const { where } = mockPrisma.transaction.findMany.mock.calls[0][0]
+    expect(where.categoryId).toBeNull()
+  })
+
   it('trie du plus récent au plus ancien', async () => {
     await app.inject({ method: 'GET', url: '/api/transactions', headers: auth() })
 
