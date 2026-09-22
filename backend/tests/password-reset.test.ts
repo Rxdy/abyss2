@@ -72,6 +72,15 @@ describe('POST /api/auth/forgot-password', () => {
     expect(url).toMatch(/^http:\/\/localhost:5174\/reset-password\?token=[0-9a-f]{64}$/)
   })
 
+  it('accepte un email entouré d\'espaces (nettoyé avant validation)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: USER_ID })
+
+    const res = await forgotPassword('  alice@example.com ')
+
+    expect(res.statusCode).toBe(200)
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith('alice@example.com', expect.any(String))
+  })
+
   it('200 — même réponse quand le compte n\'existe pas (pas d\'énumération)', async () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
 

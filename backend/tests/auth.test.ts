@@ -116,11 +116,17 @@ describe('POST /api/auth/register', () => {
       .toBe(hashEmail('alice@example.com'))
   })
 
-  // Le schéma Fastify (format: 'email') s'applique avant le handler : les espaces
-  // parasites sont rejetés, pas rognés. C'est au front de trimmer avant l'envoi.
-  it('400 — email entouré d\'espaces', async () => {
+  // Le front trimme déjà avant l'envoi, mais un appel direct à l'API (script, Swagger) n'en
+  // bénéficie pas : sans ce nettoyage côté serveur, le schéma Fastify (format: 'email') rejette
+  // les espaces parasites tel quel — voir trimEmail() dans routes/auth.ts.
+  it('accepte un email entouré d\'espaces (nettoyé avant validation)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null)
+    mockPrisma.user.create.mockResolvedValue({ id: 'new-uuid', createdAt: new Date() })
+
     const res = await register({ email: '  alice@example.com ', password: STRONG_PASSWORD })
-    expect(res.statusCode).toBe(400)
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().email).toBe('alice@example.com')
   })
 
   it('409 — email déjà utilisé', async () => {
@@ -219,6 +225,16 @@ describe('POST /api/auth/login', () => {
     expect(cookie).toMatchObject({ httpOnly: true, path: '/', sameSite: 'Lax' })
     // Pas de `Secure` en développement : un navigateur refuserait le cookie sur http://localhost.
     expect(cookie?.secure).toBeFalsy()
+  })
+
+  it('accepte un email entouré d\'espaces (nettoyé avant validation)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(
+      await makeFakeUser('alice@example.com', 'password123')
+    )
+
+    const res = await login({ email: '  alice@example.com ', password: 'password123' })
+
+    expect(res.statusCode).toBe(200)
   })
 
   it('cherche l\'utilisateur par blind index, pas par email en clair', async () => {
