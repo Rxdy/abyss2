@@ -55,3 +55,26 @@ export function buildBudgets(categories = [], statsCategories = []) {
     })
     .sort((a, b) => b.percent - a.percent || a.name.localeCompare(b.name, 'fr'))
 }
+
+/**
+ * Enveloppes : même principe que buildBudgets, mais le dépensé d'une
+ * enveloppe est la somme des dépenses de TOUTES ses catégories liées
+ * (`categoryIds`), quelle que soit leur profondeur.
+ */
+export function buildEnvelopes(envelopes = [], statsCategories = []) {
+  const spent = spentByCategory(statsCategories)
+
+  return envelopes
+    .map((envelope) => {
+      const used = envelope.categoryIds.reduce((total, id) => total + (spent.get(id) ?? 0), 0)
+      return {
+        id: envelope.id,
+        name: envelope.name,
+        budget: envelope.budget,
+        spent: used,
+        categoryIds: envelope.categoryIds,
+        ...budgetStatus(used, envelope.budget),
+      }
+    })
+    .sort((a, b) => b.percent - a.percent || a.name.localeCompare(b.name, 'fr'))
+}

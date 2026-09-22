@@ -67,6 +67,22 @@ describe('clés étrangères', () => {
     )
     expect(error).toMatch(/categories_parent_id_fkey/)
   })
+
+  it('refuse une enveloppe rattachée à un utilisateur inexistant', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.envelopes (user_id, name_encrypted, budget_encrypted) VALUES ($1::uuid, 'x', 'x')`,
+      '00000000-0000-0000-0000-000000000000',
+    )
+    expect(error).toMatch(/envelopes_user_id_fkey/)
+  })
+
+  it('refuse une catégorie rattachée à une enveloppe inexistante', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.categories (user_id, envelope_id, name_encrypted) VALUES ($1::uuid, $2::uuid, 'x')`,
+      userId, '00000000-0000-0000-0000-000000000000',
+    )
+    expect(error).toMatch(/categories_envelope_id_fkey/)
+  })
 })
 
 describe('colonnes obligatoires', () => {
@@ -96,6 +112,20 @@ describe('colonnes obligatoires', () => {
 
   it('refuse une catégorie sans nom chiffré', async () => {
     const error = await sqlError(`INSERT INTO dbo.categories (user_id) VALUES ($1::uuid)`, userId)
+    expect(error).toMatch(NOT_NULL_VIOLATION)
+  })
+
+  it('refuse une enveloppe sans nom chiffré', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.envelopes (user_id, budget_encrypted) VALUES ($1::uuid, 'x')`, userId,
+    )
+    expect(error).toMatch(NOT_NULL_VIOLATION)
+  })
+
+  it('refuse une enveloppe sans montant alloué chiffré', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.envelopes (user_id, name_encrypted) VALUES ($1::uuid, 'x')`, userId,
+    )
     expect(error).toMatch(NOT_NULL_VIOLATION)
   })
 

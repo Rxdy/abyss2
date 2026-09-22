@@ -3,14 +3,40 @@
 Légende : 🔴 à traiter en premier · 🟠 important · 🟡 confort / polish.
 ✅ **vérifié** = reproduit ou mesuré lors de l'audit ; le reste vient de la lecture du code.
 
-État : **280 tests API · 780 tests front · 116 tests base · 10 parcours de bout en bout**, typage backend propre, build OK.
+État : **320 tests API · 819 tests front · 136 tests base · 10 parcours de bout en bout**, typage backend propre, build OK.
 
 ## 1. À faire — feuille de route
 
-_Rien en attente : toutes les tâches identifiées lors de l'audit sont traitées (voir §2)._
+- [ ] 🟠 **Page Statistiques — plus de possibilités** : comparaison de plusieurs catégories/enveloppes
+      entre elles (graphique multi-séries) · historique sur 12 mois et plus (actuellement limité à des
+      périodes courtes) · export/partage des statistiques (graphique ou PDF d'une période, en plus de
+      l'export JSON/CSV déjà existant sur le Profil)
+- [ ] 🟡 **Compte de démo enrichi** : étendre l'historique généré par `make seed` au-delà des 3 mois
+      actuels (12–24 mois), pour que les graphiques et tendances du compte démo aient plus de valeur
+- [ ] 🟡 **CI — 3ᵉ étage `build`** : après lint et test, construire les images Docker de production
+      (API + front) et vérifier qu'elles démarrent saines — attrape les erreurs de packaging que
+      lint/tests ne voient pas
+- [ ] 🟡 **Tests sur les zones à 0 % de couverture** (front) : `ForgotPasswordPage`, `ResetPasswordPage`,
+      `NotFoundPage`, `App.vue`, les layouts (`AuthLayout`, `DefaultLayout`) — aucun test unitaire
+      dédié aujourd'hui, seuls les parcours Playwright les traversent. Côté API, `mail.ts` (18 % de
+      couverture) : l'envoi d'email n'est testé qu'indirectement via `password-reset.test.ts`
+- [ ] 🟡 **Animation pièce → tirelire** : réutiliser le mouvement de l'icône de l'app (pièce qui tombe
+      dans la tirelire) comme micro-interaction lors de l'ajout d'une transaction (probablement
+      `ToastHost` ou `TransactionForm`)
 
 ## 2. Fait
 
+- [x] **Enveloppes budgétaires** : nouvelle enveloppe (nom + montant alloué mensuel, chiffré) regroupant
+      plusieurs catégories (`Category.envelopeId`, une seule enveloppe à la fois) ; la jauge de
+      l'enveloppe = dépenses cumulées de toutes ses catégories liées sur le mois affiché (réutilise
+      `BudgetList` et la navigation par mois de l'accueil). Jamais bloquant : dépasser l'enveloppe, ou
+      allouer plus que les revenus réels du mois, affiche une alerte informative (`AlertBanner`) sans
+      jamais refuser une transaction. Pas de report du solde au mois suivant (repart à zéro chaque
+      mois, comme le budget par catégorie) — à revoir si l'usage le demande. CRUD complet
+      (`/api/envelopes`), page dédiée (Profil → Enveloppes), catégories liées choisies par chips
+      (`BaseChip`). Migration `20260922110000_add_envelopes` ; couvert par 12 tests API, 5 tests base
+      (contraintes, cascades, trigger, index, dérive Prisma) et les tests front (store, formulaire,
+      ligne, page, section accueil)
 - [x] **Récupération de mot de passe** : `POST /api/auth/forgot-password` (jeton haute entropie, seul son hash
       SHA-256 est stocké — `PasswordResetToken`, une ligne par demande, `usedAt` empêche de rejouer un lien),
       email envoyé via `backend/src/utils/mail.ts`, `POST /api/auth/reset-password` (jeton expiré/déjà utilisé
