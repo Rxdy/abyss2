@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import TransactionForm from '@/components/organisms/TransactionForm.vue'
 import { useCategoriesStore } from '@/stores/categories.store.js'
+import { useCoinDropStore } from '@/stores/coinDrop.store.js'
 import { useToastStore } from '@/stores/toast.store.js'
 import { todayISO } from '@/utils/format.js'
 import { mockApi, calls } from '../../stores/_helpers.js'
@@ -67,6 +68,18 @@ describe('TransactionForm — création', () => {
     w.unmount()
   })
 
+  it('joue l\'animation de la pièce', async () => {
+    mockApi(() => ({ body: { ...TX, id: 'new' } }))
+    const w = mountForm()
+
+    await w.find('#transaction-title').setValue('Café')
+    await w.find('#transaction-amount').setValue('3,50')
+    await submit(w)
+
+    expect(useCoinDropStore().plays).toHaveLength(1)
+    w.unmount()
+  })
+
   it('envoie la note saisie', async () => {
     const fetchMock = mockApi(() => ({ body: TX }))
     const w = mountForm()
@@ -125,6 +138,17 @@ describe('TransactionForm — modification', () => {
 
     expect(calls(fetchMock)[0]).toMatchObject({ method: 'PUT', path: '/api/transactions/t1', body: { title: 'Carrefour', note: 'chez Marc' } })
     expect(useToastStore().items[0].message).toBe('Transaction modifiée.')
+    w.unmount()
+  })
+
+  it('ne joue pas l\'animation de la pièce (réservée à la création)', async () => {
+    mockApi(() => ({ body: { ...TX, title: 'Carrefour' } }))
+    const w = mountForm({ transaction: TX })
+
+    await w.find('#transaction-title').setValue('Carrefour')
+    await submit(w)
+
+    expect(useCoinDropStore().plays).toHaveLength(0)
     w.unmount()
   })
 
