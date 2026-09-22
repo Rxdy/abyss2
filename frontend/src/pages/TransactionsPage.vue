@@ -194,16 +194,18 @@ onMounted(() => {
 
 .transactions__sticky {
   position: sticky;
-  top: 0;
+  /* `main` (DefaultLayout) est le conteneur défilant et porte son propre padding-top : avec
+     `top: 0`, le bloc ne se colle qu'à ce padding-top (24-32px sous le vrai bord de la zone de
+     défilement), laissant cet espace vide où les cartes qui défilent restent visibles. Un `top`
+     négatif décale le point d'ancrage lui-même jusqu'au bord réel (vérifié au pixel : une marge
+     négative, elle, ne change rien à la position une fois collé — comportement peu fiable avec
+     position: sticky). Le padding-top compense pour que le contenu ne touche pas ce bord.
+  */
+  top: calc(-1 * var(--content-padding));
   z-index: 10;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  /* `main` (DefaultLayout) est le conteneur défilant et porte son propre padding-top : sans ce
-     rattrapage, ce padding reste un espace vide au-dessus du bloc une fois collé en haut, et les
-     cartes qui défilent restent visibles par cette fente. On remonte le bloc dans ce padding
-     (marge négative) et on le lui rend en interne, couvert cette fois par son propre fond. */
-  margin-top: calc(-1 * var(--content-padding));
   padding-top: calc(var(--content-padding) + var(--space-1));
   padding-bottom: var(--space-3);
   background: var(--color-bg-base);
