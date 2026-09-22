@@ -13,9 +13,16 @@
  * en base) : on ne perd jamais de structure silencieusement.
  */
 
+import type { FastifyInstance } from 'fastify'
+import type { Category } from '@prisma/client'
 import { encryptValue, decryptValue } from '../utils/crypto.js'
+import type { ApiError } from '../types.js'
 
 const CATEGORY_USAGE = 'category-name'
+const BUDGET_USAGE   = 'category-budget'
+
+/** Plafond mensuel maximal accepté, en centimes (1 000 000 €). */
+const BUDGET_MAX = 100_000_000
 
 const categorySchema = {
   type: 'object',
@@ -24,6 +31,7 @@ const categorySchema = {
     name:             { type: 'string' },
     color:            { type: 'string', nullable: true },
     position:         { type: 'integer', nullable: true },
+    budget:           { type: 'integer', nullable: true, description: 'Plafond mensuel en centimes, null : pas de budget' },
     parentId:         { type: 'string', format: 'uuid', nullable: true },
     transactionCount: { type: 'integer' },
     childrenCount:    { type: 'integer' },
@@ -38,12 +46,13 @@ const errorSchema = {
 const COUNTS_INCLUDE = { _count: { select: { transactions: true, children: true } } }
 
 /** Ligne Prisma (+ _count éventuel) → objet exposé par l'API. */
-function toApi(category: any) {
+function toApi(category: Category & { _count?: { transactions: number; children: number } }) {
   return {
     id:               category.id,
     name:             decryptValue(category.nameEncrypted, CATEGORY_USAGE),
     color:            category.color,
     position:         category.position,
+    budget:           category.budgetEncrypted ? parseInt(decryptValue(category.budgetEncrypted, BUDGET_USAGE), 10) : null,
     parentId:         category.parentId ?? null,
     transactionCount: category._count?.transactions ?? 0,
     childrenCount:    category._count?.children ?? 0,
@@ -56,7 +65,7 @@ function toApi(category: any) {
  * pas créer de boucle sur soi-même. Renvoie un message d'erreur (code inclus)
  * ou `null` si tout va bien.
  */
-async function validateParent(fastify: any, userId: string, selfId: string | null, parentId: string) {
+async function validateParent(fastify: FastifyInstance, userId: string, selfId: string | null, parentId: string): Promise<ApiError | null> {
   if (selfId && parentId === selfId) {
     return { code: 'CATEGORY_SELF_PARENT', error: 'Une catégorie ne peut pas être sa propre catégorie parente.' }
   }
@@ -77,7 +86,16 @@ async function validateParent(fastify: any, userId: string, selfId: string | nul
   return null
 }
 
-export default async function categoryRoutes(fastify: any) {
+interface CategoryBody {
+  name?: string
+  color?: string
+  position?: number
+  /** Plafond mensuel en centimes ; null le retire. */
+  budget?: number | null
+  parentId?: string | null
+}
+
+export default async function categoryRoutes(fastify: FastifyInstance) {
   // ── GET /api/categories ─────────────────────────────────
   fastify.get('/api/categories', {
     schema: {
@@ -87,7 +105,7 @@ export default async function categoryRoutes(fastify: any) {
       response: { 200: { type: 'array', items: categorySchema }, 401: errorSchema },
     },
     preHandler: fastify.authenticate,
-  }, async (req: any) => {
+  }, async (req) => {
     const categories = await fastify.prisma.category.findMany({
       where:   { userId: req.user.userId },
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
@@ -98,7 +116,7 @@ export default async function categoryRoutes(fastify: any) {
   })
 
   // ── POST /api/categories ────────────────────────────────
-  fastify.post('/api/categories', {
+  fastify.post<{ Body: CategoryBody & { name: string } }>('/api/categories', {
     schema: {
       summary: 'Créer une catégorie (ou une sous-catégorie via parentId)',
       tags: ['categories'],
@@ -110,14 +128,15 @@ export default async function categoryRoutes(fastify: any) {
           name:     { type: 'string', minLength: 1, maxLength: 60 },
           color:    { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
           position: { type: 'integer' },
+          budget:   { type: 'integer', minimum: 1, maximum: BUDGET_MAX, nullable: true, description: 'Plafond mensuel en centimes ; null retire le budget' },
           parentId: { type: 'string', format: 'uuid', nullable: true },
         },
       },
       response: { 201: categorySchema, 400: errorSchema, 401: errorSchema },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
-    const { name, color, position, parentId } = req.body
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
+    const { name, color, position, parentId, budget } = req.body
 
     if (parentId) {
       const parentError = await validateParent(fastify, req.user.userId, null, parentId)
@@ -132,6 +151,7 @@ export default async function categoryRoutes(fastify: any) {
         nameEncrypted: encryptValue(name.trim(), CATEGORY_USAGE),
         color:         color ?? null,
         position:      position ?? count,
+        budgetEncrypted: budget ? encryptValue(String(budget), BUDGET_USAGE) : null,
         parentId:      parentId ?? null,
       },
     })
@@ -140,7 +160,7 @@ export default async function categoryRoutes(fastify: any) {
   })
 
   // ── PUT /api/categories/:id ─────────────────────────────
-  fastify.put('/api/categories/:id', {
+  fastify.put<{ Params: { id: string }; Body: CategoryBody }>('/api/categories/:id', {
     schema: {
       summary: 'Modifier une catégorie',
       tags: ['categories'],
@@ -156,13 +176,14 @@ export default async function categoryRoutes(fastify: any) {
           name:     { type: 'string', minLength: 1, maxLength: 60 },
           color:    { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
           position: { type: 'integer' },
+          budget:   { type: 'integer', minimum: 1, maximum: BUDGET_MAX, nullable: true, description: 'Plafond mensuel en centimes ; null retire le budget' },
           parentId: { type: 'string', format: 'uuid', nullable: true },
         },
       },
       response: { 200: categorySchema, 400: errorSchema, 401: errorSchema, 404: errorSchema },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
     const existing = await fastify.prisma.category.findFirst({
       where:  { id: req.params.id, userId: req.user.userId },
       include: COUNTS_INCLUDE,
@@ -172,7 +193,7 @@ export default async function categoryRoutes(fastify: any) {
       return reply.code(404).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })
     }
 
-    const { name, color, position, parentId } = req.body
+    const { name, color, position, parentId, budget } = req.body
 
     if (parentId !== undefined && parentId !== null) {
       const parentError = await validateParent(fastify, req.user.userId, req.params.id, parentId)
@@ -192,6 +213,7 @@ export default async function categoryRoutes(fastify: any) {
         ...(name     !== undefined && { nameEncrypted: encryptValue(name.trim(), CATEGORY_USAGE) }),
         ...(color    !== undefined && { color }),
         ...(position !== undefined && { position }),
+        ...(budget   !== undefined && { budgetEncrypted: budget === null ? null : encryptValue(String(budget), BUDGET_USAGE) }),
         ...(parentId !== undefined && { parentId }),
       },
       include: COUNTS_INCLUDE,
@@ -205,7 +227,7 @@ export default async function categoryRoutes(fastify: any) {
   // si `reassignTo` est fourni : elles sont alors basculées vers cette autre
   // catégorie avant la suppression. Les sous-catégories éventuelles sont
   // conservées et promues en catégories de premier niveau.
-  fastify.delete('/api/categories/:id', {
+  fastify.delete<{ Params: { id: string }; Body?: { reassignTo?: string | null } | null }>('/api/categories/:id', {
     schema: {
       summary: 'Supprimer une catégorie',
       tags: ['categories'],
@@ -234,8 +256,8 @@ export default async function categoryRoutes(fastify: any) {
         404: errorSchema,
       },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
     const existing = await fastify.prisma.category.findFirst({
       where:  { id: req.params.id, userId: req.user.userId },
       select: { id: true },
@@ -265,7 +287,7 @@ export default async function categoryRoutes(fastify: any) {
       }
     }
 
-    await fastify.prisma.$transaction(async (tx: any) => {
+    await fastify.prisma.$transaction(async (tx) => {
       if (reassignTo) {
         await tx.transaction.updateMany({
           where: { userId: req.user.userId, categoryId: req.params.id },

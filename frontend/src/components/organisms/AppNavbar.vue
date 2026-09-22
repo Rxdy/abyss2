@@ -11,12 +11,16 @@
  */
 import NavItem from '@/components/molecules/NavItem.vue'
 
-/* L'accueil est volontairement au centre : c'est la destination par défaut. */
+/*
+ * L'accueil est volontairement au centre : c'est la destination par défaut.
+ * Gauche = consultation (stats, historique), droite = gestion (récurrent, compte).
+ */
 const ROUTES = [
-  { to: '/transactions', icon: 'list',  label: 'Transactions' },
-  { to: '/',             icon: 'home',  label: 'Accueil'      },
-  { to: '/stats',        icon: 'chart', label: 'Stats'        },
-  { to: '/profile',      icon: 'user',  label: 'Profil'       },
+  { to: '/stats',        icon: 'chart',  label: 'Stats'        },
+  { to: '/transactions', icon: 'list',   label: 'Transactions' },
+  { to: '/',             icon: 'home',   label: 'Accueil'      },
+  { to: '/recurring',    icon: 'repeat', label: 'Récurrent'    },
+  { to: '/profile',      icon: 'user',   label: 'Profil'       },
 ]
 </script>
 

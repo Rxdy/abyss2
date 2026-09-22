@@ -21,9 +21,6 @@ model User {
   emailHash      String   @unique @map("email_hash") @db.VarChar(64)  // HMAC-SHA256 — blind index pour lookup
   emailEncrypted String   @map("email_encrypted") @db.Text            // AES-256-GCM — pour affichage
   passwordHash   String   @map("password_hash") @db.Text
-  authSalt       String   @map("auth_salt") @db.VarChar(32)           // 16 bytes hex — pour hash password
-  keySalt        String   @map("key_salt") @db.VarChar(32)            // 16 bytes hex — pour dérivation de clé
-  keyFragment    String   @map("key_fragment") @db.VarChar(64)        // 32 bytes hex — split-key fragment
   tokenVersion   Int      @default(0) @map("token_version")          // incrémenté → invalide tous les JWT déjà émis
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
@@ -31,8 +28,33 @@ model User {
   categories     Category[]
   transactions   Transaction[]
   recurring      RecurringTransaction[]
+  resetTokens    PasswordResetToken[]
 
   @@map("users")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: PasswordResetToken — lien de réinitialisation envoyé par email
+//
+// Le jeton lui-même (haute entropie, 32 octets aléatoires) ne quitte jamais
+// le serveur : seul son hash SHA-256 est stocké, comme un mot de passe.
+// Une ligne par demande (pas de colonne sur User) : plusieurs demandes
+// successives coexistent, et `usedAt` empêche de rejouer un lien déjà utilisé
+// sans avoir à le supprimer (traçabilité).
+// ============================================================
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime? @map("used_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
   @@schema("dbo")
 }
 
@@ -51,6 +73,7 @@ model Category {
   nameEncrypted String   @map("name_encrypted") @db.Text
   color         String?  @db.VarChar(7)   // #RRGGBB — non chiffré, sert au rendu
   position      Int?     @db.Integer
+  budgetEncrypted String? @map("budget_encrypted") @db.Text  // plafond mensuel en centimes, chiffré — NULL : pas de budget
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -91,6 +114,7 @@ model Transaction {
   @@index([userId, date])
   @@index([categoryId])
   @@index([recurringId])
+  @@unique([recurringId, date], map: "uq_transactions_recurring_date")
   @@map("transactions")
   @@schema("dbo")
 }

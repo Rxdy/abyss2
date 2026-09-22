@@ -5,8 +5,8 @@ import { useApi } from '@/composables/useApi.js'
 import { useAuthStore } from '@/stores/auth.store.js'
 import BaseInput   from '@/components/atoms/BaseInput.vue'
 import BaseButton  from '@/components/atoms/BaseButton.vue'
-import BaseText    from '@/components/atoms/BaseText.vue'
-import ThemeToggle from '@/components/molecules/ThemeToggle.vue'
+import AlertBanner from '@/components/molecules/AlertBanner.vue'
+import AuthShell   from '@/components/organisms/AuthShell.vue'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -35,7 +35,7 @@ async function submit() {
       password: password.value,
     })
 
-    auth.setSession({ token: response.token, user: response.user })
+    auth.setSession({ user: response.user, csrfToken: response.csrfToken })
 
     router.push({ name: 'home' })
   } catch (err) {
@@ -47,117 +47,72 @@ async function submit() {
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-page__theme">
-      <ThemeToggle />
-    </div>
+  <AuthShell subtitle="Connectez-vous à votre espace">
+    <Transition name="fade">
+      <AlertBanner v-if="errors.global">{{ errors.global }}</AlertBanner>
+    </Transition>
 
-    <div class="auth-page__card">
-      <!-- Brand -->
-      <div class="auth-page__brand">
-        <svg class="auth-page__logo" viewBox="0 0 64 64" aria-hidden="true">
-          <circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="3" />
-          <circle cx="32" cy="32" r="12" fill="currentColor" opacity="0.85" />
-        </svg>
-        <BaseText as="h1" size="3xl" weight="bold" color="primary">ABYSS2</BaseText>
-        <BaseText as="p" size="sm" color="muted">Connectez-vous à votre espace</BaseText>
-      </div>
+    <form class="auth-form" novalidate @submit.prevent="submit">
+      <BaseInput
+        v-model="email"
+        id="login-email"
+        type="email"
+        label="Adresse email"
+        placeholder="vous@exemple.com"
+        :error="errors.email"
+        required
+        autocomplete="email"
+      />
 
-      <!-- Erreur globale -->
-      <Transition name="fade">
-        <div v-if="errors.global" class="auth-page__error" role="alert">
-          <BaseText size="sm" color="danger">{{ errors.global }}</BaseText>
-        </div>
-      </Transition>
+      <BaseInput
+        v-model="password"
+        id="login-password"
+        type="password"
+        label="Mot de passe"
+        placeholder="••••••••"
+        :error="errors.password"
+        required
+        autocomplete="current-password"
+      />
 
-      <!-- Formulaire -->
-      <form class="auth-page__form" novalidate @submit.prevent="submit">
-        <BaseInput
-          v-model="email"
-          id="login-email"
-          type="email"
-          label="Adresse email"
-          placeholder="vous@exemple.com"
-          :error="errors.email"
-          required
-          autocomplete="email"
-        />
+      <RouterLink class="auth-form__forgot" :to="{ name: 'forgot-password' }">
+        Mot de passe oublié ?
+      </RouterLink>
 
-        <BaseInput
-          v-model="password"
-          id="login-password"
-          type="password"
-          label="Mot de passe"
-          placeholder="••••••••"
-          :error="errors.password"
-          required
-          autocomplete="current-password"
-        />
+      <BaseButton
+        type="submit"
+        variant="primary"
+        :loading="loading"
+        full
+      >
+        Se connecter
+      </BaseButton>
+    </form>
 
-        <BaseButton
-          type="submit"
-          variant="primary"
-          :loading="loading"
-          full
-        >
-          Se connecter
-        </BaseButton>
-      </form>
-    </div>
-  </div>
+    <template #footer>
+      Pas encore de compte ? <RouterLink :to="{ name: 'register' }">Créer un compte</RouterLink>
+    </template>
+  </AuthShell>
 </template>
 
 <style scoped>
-.auth-page {
-  position: relative;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-5) var(--content-padding);
-  background: var(--color-bg-base);
-}
-
-.auth-page__theme {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--content-padding);
-}
-
-.auth-page__card {
-  width: 100%;
-  max-width: 26rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.auth-page__brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  text-align: center;
-}
-
-.auth-page__logo {
-  width: 80px;
-  height: 80px;
-  color: var(--color-primary);
-  filter: drop-shadow(var(--shadow-glow-primary));
-}
-
-.auth-page__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.auth-page__form {
+.auth-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.auth-form__forgot {
+  align-self: flex-end;
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.auth-form__forgot:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 /* Transition fondu erreur globale */

@@ -11,7 +11,6 @@ beforeAll(() => {
 })
 
 const { encryptValue, decryptValue } = await import('../src/utils/crypto.js')
-const { CATEGORY_USAGE } = await import('../src/routes/categories.js')
 const { TITLE_USAGE, AMOUNT_USAGE } = await import('../src/routes/transactions.js')
 
 const USER_ID = '11111111-1111-1111-1111-111111111111'
@@ -43,11 +42,12 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user:     { findUnique: vi.fn() },
+    user:     { findUnique: vi.fn().mockResolvedValue({ tokenVersion: 0 }) },
     category: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     transaction: {
-      findMany: vi.fn().mockResolvedValue([]),
-      create:   vi.fn(),
+      findMany:   vi.fn().mockResolvedValue([]),
+      create:     vi.fn(),
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     recurringTransaction: {
       findMany:  vi.fn().mockResolvedValue([]),
@@ -62,7 +62,7 @@ beforeEach(async () => {
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
-  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com' })
+  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com', tv: 0 })
 })
 
 afterEach(async () => {

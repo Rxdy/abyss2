@@ -44,6 +44,13 @@ describe('LoginPage — rendu', () => {
     expect(w.find('.theme-toggle').exists()).toBe(true)
   })
 
+  it('propose de créer un compte', () => {
+    const link = mount(LoginPage).find('a[href="/register"]')
+
+    expect(link.exists()).toBe(true)
+    expect(link.text()).toBe('Créer un compte')
+  })
+
   it('n\'affiche aucune erreur au chargement', () => {
     const w = mount(LoginPage)
     expect(w.find('[role="alert"]').exists()).toBe(false)
@@ -79,7 +86,7 @@ describe('LoginPage — validation', () => {
 
 describe('LoginPage — connexion réussie', () => {
   it('envoie l\'email normalisé à l\'API', async () => {
-    const fetchMock = mockFetch({ token: 'jwt', user: { id: '1', email: 'alice@example.com' } })
+    const fetchMock = mockFetch({ csrfToken: 'csrf-abc', user: { id: '1', email: 'alice@example.com' } })
     const w = mount(LoginPage)
 
     await fillAndSubmit(w, '  Alice@Example.COM  ', 'password123')
@@ -93,19 +100,19 @@ describe('LoginPage — connexion réussie', () => {
   })
 
   it('enregistre la session dans le store', async () => {
-    mockFetch({ token: 'jwt', user: { id: '1', email: 'alice@example.com' } })
+    mockFetch({ csrfToken: 'csrf-abc', user: { id: '1', email: 'alice@example.com' } })
     const w = mount(LoginPage)
 
     await fillAndSubmit(w, 'alice@example.com', 'password123')
 
     const auth = useAuthStore()
     expect(auth.isAuthenticated).toBe(true)
-    expect(auth.token).toBe('jwt')
+    expect(auth.csrfToken).toBe('csrf-abc')
     expect(auth.user.email).toBe('alice@example.com')
   })
 
   it('redirige vers l\'accueil', async () => {
-    mockFetch({ token: 'jwt', user: { id: '1', email: 'alice@example.com' } })
+    mockFetch({ csrfToken: 'csrf-abc', user: { id: '1', email: 'alice@example.com' } })
     const push = vi.spyOn(router, 'push')
     const w = mount(LoginPage)
 

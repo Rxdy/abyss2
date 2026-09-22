@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import AuthLayout    from '@/layouts/AuthLayout.vue'
+import ToastHost     from '@/components/organisms/ToastHost.vue'
 import { useAuthStore } from '@/stores/auth.store.js'
 import { useAppStore }  from '@/stores/app.store.js'
 
@@ -14,17 +15,21 @@ const appStore  = useAppStore()
 const LAYOUTS = { default: DefaultLayout, auth: AuthLayout }
 const layout  = computed(() => LAYOUTS[route.meta?.layout ?? 'default'])
 
-// Valide le token JWT contre l'API au démarrage
+// Valide la session (cookie httpOnly) contre l'API au démarrage, et récupère un jeton CSRF frais —
+// perdu à chaque rechargement puisqu'il ne vit qu'en mémoire (voir stores/auth.store.js).
 async function validateSession() {
   if (!authStore.isAuthenticated) return
   try {
     const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
-    const res = await fetch(`${BASE_URL}/api/user`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    })
+    const res = await fetch(`${BASE_URL}/api/user`, { credentials: 'include' })
     if (res.status === 401 || res.status === 403) {
-      authStore.logout()
+      await authStore.logout()
       router.push({ name: 'login' })
+      return
+    }
+    if (res.ok) {
+      const data = await res.json()
+      authStore.setSession({ user: { id: data.id, email: data.email }, csrfToken: data.csrfToken })
     }
   } catch {
     // Pas de réseau → on laisse l'utilisateur, la redirection se fera si une requête échoue
@@ -39,6 +44,7 @@ onMounted(async () => {
 
 <template>
   <component :is="layout" />
+  <ToastHost />
 </template>
 
 <style>

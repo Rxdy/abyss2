@@ -1,13 +1,12 @@
 <script setup>
 import { computed } from 'vue'
 import BaseText from '@/components/atoms/BaseText.vue'
-import { formatAmount, formatMonth } from '@/utils/format.js'
+import { formatAmount } from '@/utils/format.js'
 
 const props = defineProps({
   balance:      { type: Number, default: 0 },
   monthIncome:  { type: Number, default: 0 },
   monthExpense: { type: Number, default: 0 },
-  month:        { type: String, default: '' },
 })
 
 const isNegative = computed(() => props.balance < 0)
@@ -27,31 +26,32 @@ const isNegative = computed(() => props.balance < 0)
       {{ formatAmount(balance) }}
     </BaseText>
 
-    <div class="balance__month">
-      <div class="balance__stat">
-        <span class="balance__dot balance__dot--income" aria-hidden="true" />
-        <div>
-          <BaseText as="p" size="xs" color="muted">Revenus</BaseText>
-          <BaseText as="p" size="sm" weight="semibold" color="success">
-            {{ formatAmount(monthIncome) }}
-          </BaseText>
-        </div>
-      </div>
+    <!-- Le solde est global ; ce qui suit concerne le mois affiché (sélecteur fourni par la page) -->
+    <div class="balance__period">
+      <slot name="month" />
 
-      <div class="balance__stat">
-        <span class="balance__dot balance__dot--expense" aria-hidden="true" />
-        <div>
-          <BaseText as="p" size="xs" color="muted">Dépenses</BaseText>
-          <BaseText as="p" size="sm" weight="semibold" color="danger">
-            {{ formatAmount(monthExpense) }}
-          </BaseText>
+      <div class="balance__month">
+        <div class="balance__stat">
+          <span class="balance__dot balance__dot--income" aria-hidden="true" />
+          <div>
+            <BaseText as="p" size="xs" color="muted">Revenus</BaseText>
+            <BaseText as="p" size="sm" weight="semibold" color="success">
+              {{ formatAmount(monthIncome) }}
+            </BaseText>
+          </div>
+        </div>
+
+        <div class="balance__stat">
+          <span class="balance__dot balance__dot--expense" aria-hidden="true" />
+          <div>
+            <BaseText as="p" size="xs" color="muted">Dépenses</BaseText>
+            <BaseText as="p" size="sm" weight="semibold" color="danger">
+              {{ formatAmount(monthExpense) }}
+            </BaseText>
+          </div>
         </div>
       </div>
     </div>
-
-    <BaseText v-if="month" as="p" size="xs" color="muted">
-      Mois en cours — {{ formatMonth(month) }}
-    </BaseText>
   </section>
 </template>
 
@@ -72,13 +72,19 @@ const isNegative = computed(() => props.balance < 0)
   line-height: var(--leading-tight);
 }
 
+.balance__period {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
 .balance__month {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
 }
 
 .balance__stat {

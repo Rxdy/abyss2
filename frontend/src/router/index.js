@@ -7,7 +7,25 @@ const routes = [
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginPage.vue'),
-    meta: { layout: 'auth', title: 'Connexion' }
+    meta: { layout: 'auth', title: 'Connexion', guestOnly: true }
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/pages/RegisterPage.vue'),
+    meta: { layout: 'auth', title: 'Inscription', guestOnly: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/pages/ForgotPasswordPage.vue'),
+    meta: { layout: 'auth', title: 'Mot de passe oublié', guestOnly: true }
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/pages/ResetPasswordPage.vue'),
+    meta: { layout: 'auth', title: 'Nouveau mot de passe', guestOnly: true }
   },
 
   // ── App (layout par défaut — protégées) ──────────────────
@@ -43,7 +61,7 @@ const routes = [
     meta: { layout: 'default', title: 'Catégories', requiresAuth: true }
   },
   {
-    path: '/profile/recurring',
+    path: '/recurring',
     name: 'recurring',
     component: () => import('@/pages/RecurringPage.vue'),
     meta: { layout: 'default', title: 'Charges fixes', requiresAuth: true }
@@ -77,8 +95,8 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
 
-  // Déjà connecté → pas besoin d'aller sur login
-  if (to.name === 'login' && isAuthenticated) {
+  // Déjà connecté → pas besoin d'aller sur login / register
+  if (to.meta.guestOnly && isAuthenticated) {
     return { name: 'home' }
   }
 })

@@ -23,8 +23,8 @@ function catRow(id: string, name: string, color: string, parentId: string | null
   return { id, userId: USER_ID, parentId, nameEncrypted: encryptValue(name, CATEGORY_USAGE), color }
 }
 
-function txRow(amount: number, categoryId: string | null, type = 'expense') {
-  return { amountEncrypted: encryptValue(String(amount), AMOUNT_USAGE), categoryId, type }
+function txRow(amount: number, categoryId: string | null, type = 'expense', date = new Date('2026-01-15')) {
+  return { amountEncrypted: encryptValue(String(amount), AMOUNT_USAGE), categoryId, type, date }
 }
 
 let app: any
@@ -33,7 +33,7 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user:     { findUnique: vi.fn() },
+    user:     { findUnique: vi.fn().mockResolvedValue({ tokenVersion: 0 }) },
     category: { findMany: vi.fn().mockResolvedValue([]) },
     transaction: { findMany: vi.fn().mockResolvedValue([]) },
     recurringTransaction: { findMany: vi.fn().mockResolvedValue([]) },
@@ -43,7 +43,7 @@ beforeEach(async () => {
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
-  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com' })
+  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com', tv: 0 })
 })
 
 afterEach(async () => {
@@ -63,6 +63,20 @@ describe('GET /api/stats', () => {
     const res = await get('?from=2026-02-01&to=2026-01-01')
     expect(res.statusCode).toBe(400)
     expect(res.json().code).toBe('END_BEFORE_START')
+  })
+
+  it('400 — période de plus de 10 ans', async () => {
+    const res = await get('?from=2000-01-01&to=2026-01-01')
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('RANGE_TOO_LARGE')
+  })
+
+  it('accepte une période d\'exactement 10 ans', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+    mockPrisma.category.findMany.mockResolvedValue([])
+
+    const res = await get('?from=2016-01-01&to=2026-01-01')
+    expect(res.statusCode).toBe(200)
   })
 
   it('calcule le pourcentage de chaque catégorie sur le total', async () => {
@@ -126,5 +140,76 @@ describe('GET /api/stats', () => {
     const res = await get('?from=2026-01-01&to=2026-01-31')
 
     expect(res.json()).toMatchObject({ total: 0, categories: [] })
+  })
+
+  it('regroupe le montant par jour dans `timeseries` (période courte)', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      txRow(1000, null, 'expense', new Date('2026-01-01')),
+      txRow(2000, null, 'expense', new Date('2026-01-01')),
+      txRow(500, null, 'expense', new Date('2026-01-03')),
+    ])
+
+    const res = await get('?from=2026-01-01&to=2026-01-03')
+
+    expect(res.json().timeseries).toEqual([
+      { date: '2026-01-01', amount: 3000 },
+      { date: '2026-01-02', amount: 0 },
+      { date: '2026-01-03', amount: 500 },
+    ])
+  })
+
+  it('regroupe le montant par mois dans `timeseries` (période longue)', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      txRow(1000, null, 'expense', new Date('2026-01-15')),
+      txRow(500, null, 'expense', new Date('2026-03-02')),
+    ])
+
+    const res = await get('?from=2026-01-01&to=2026-03-31')
+
+    expect(res.json().timeseries).toEqual([
+      { date: '2026-01', amount: 1000 },
+      { date: '2026-02', amount: 0 },
+      { date: '2026-03', amount: 500 },
+    ])
+  })
+})
+
+describe('GET /api/stats/periods', () => {
+  const getPeriods = (qs = '') => app.inject({ method: 'GET', url: `/api/stats/periods${qs}`, headers: auth() })
+
+  it('401 sans token', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/stats/periods' })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('renvoie les mois et années distincts, du plus récent au plus ancien', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      { date: new Date('2025-03-05') },
+      { date: new Date('2026-01-10') },
+      { date: new Date('2026-01-20') },
+    ])
+
+    const res = await getPeriods()
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({
+      months: ['2026-01', '2025-03'],
+      years: ['2026', '2025'],
+    })
+  })
+
+  it('filtre par type (expense par défaut, income explicite)', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+    await getPeriods('?type=income')
+
+    expect(mockPrisma.transaction.findMany.mock.calls[0][0].where.type).toBe('income')
+  })
+
+  it('listes vides si aucune transaction', async () => {
+    mockPrisma.transaction.findMany.mockResolvedValue([])
+
+    const res = await getPeriods()
+
+    expect(res.json()).toEqual({ months: [], years: [] })
   })
 })

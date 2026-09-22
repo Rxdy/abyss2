@@ -1,0 +1,4 @@
+# Fichier posé par Prisma Migrate — ne pas éditer à la main.
+# https://pris.ly/d/migrate-lock
+
+provider = "postgresql"

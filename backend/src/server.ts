@@ -11,7 +11,7 @@ dotenv.config()
 
 const PORT = parseInt(process.env.API_PORT ?? '3000', 10)
 
-let app: any
+let app: Awaited<ReturnType<typeof buildApp>> | undefined
 
 const shutdown = async () => {
   try {

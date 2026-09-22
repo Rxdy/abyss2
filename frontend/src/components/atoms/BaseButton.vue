@@ -2,7 +2,7 @@
 const emit = defineEmits(['click'])
 
 defineProps({
-  /** 'primary' | 'secondary' | 'ghost' | 'danger' */
+  /** 'primary' | 'accent' | 'secondary' | 'ghost' | 'danger' */
   variant: { type: String, default: 'primary' },
   /** 'sm' | 'md' | 'lg' */
   size:    { type: String, default: 'md' },
@@ -62,6 +62,12 @@ defineProps({
 }
 .btn--primary:hover:not(:disabled) { background: var(--color-primary-hover); }
 
+.btn--accent {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+.btn--accent:hover:not(:disabled) { background: var(--color-accent-hover); }
+
 .btn--secondary {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
@@ -83,7 +89,7 @@ defineProps({
   color: var(--color-danger);
   border-color: var(--color-danger);
 }
-.btn--danger:hover:not(:disabled) { background: var(--color-danger); color: #fff; }
+.btn--danger:hover:not(:disabled) { background: var(--color-danger); color: var(--color-text-inverse); }
 
 /* States */
 .btn:disabled,

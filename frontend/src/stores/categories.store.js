@@ -43,8 +43,11 @@ export const useCategoriesStore = defineStore('categories', {
       }
     },
 
-    async create({ name, color, parentId }) {
-      const created = await useApi().post('/api/categories', { name, color, parentId: parentId ?? null })
+    async create({ name, color, parentId, budget }) {
+      const created = await useApi().post('/api/categories', {
+        name, color, parentId: parentId ?? null,
+        ...(budget != null && { budget }),
+      })
       this.items.push(created)
       return created
     },
