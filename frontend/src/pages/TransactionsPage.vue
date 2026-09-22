@@ -199,7 +199,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding-top: var(--space-1);
+  /* `main` (DefaultLayout) est le conteneur défilant et porte son propre padding-top : sans ce
+     rattrapage, ce padding reste un espace vide au-dessus du bloc une fois collé en haut, et les
+     cartes qui défilent restent visibles par cette fente. On remonte le bloc dans ce padding
+     (marge négative) et on le lui rend en interne, couvert cette fois par son propre fond. */
+  margin-top: calc(-1 * var(--content-padding));
+  padding-top: calc(var(--content-padding) + var(--space-1));
   padding-bottom: var(--space-3);
   background: var(--color-bg-base);
 }
