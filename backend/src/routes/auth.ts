@@ -55,6 +55,17 @@ interface Credentials {
   password: string
 }
 
+/**
+ * Retire les espaces qui entourent l'email avant la validation AJV (`format: 'email'` les refuse
+ * tel quel — un copier-coller en garde facilement un). Le front les retire déjà de son côté, mais
+ * un appel direct à l'API (script, Swagger) ne bénéficie pas de cette étape.
+ */
+function trimEmail(req: FastifyRequest, _reply: FastifyReply, done: (err?: Error) => void) {
+  const body = req.body as { email?: unknown } | undefined
+  if (body && typeof body.email === 'string') body.email = body.email.trim()
+  done()
+}
+
 export default async function authRoutes(fastify: FastifyInstance) {
   const loginByIp = fastify.createRateLimit({
     ...LOGIN_IP_LIMIT,
@@ -91,6 +102,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     config: {
       rateLimit: { ...REGISTER_LIMIT, keyGenerator: (req: FastifyRequest) => `register:${req.ip}` },
     },
+    preValidation: trimEmail,
     schema: {
       summary: 'Créer un compte utilisateur',
       tags: ['auth'],
@@ -177,6 +189,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: Credentials }>('/api/auth/login', {
     // Deux limiteurs manuels : le plugin n'applique qu'un seul limiteur « de route » par requête.
     onRequest:  enforce(loginByIp),
+    preValidation: trimEmail,
     preHandler: enforce(loginByAccount), // après parsing : c'est là que l'email est lisible
     schema: {
       summary: 'Authentifier un utilisateur',
@@ -257,6 +270,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   // la boîte mail l'apprend, via l'email lui-même (ou son absence).
   fastify.post<{ Body: { email: string } }>('/api/auth/forgot-password', {
     onRequest:  enforce(forgotPasswordByIp),
+    preValidation: trimEmail,
     preHandler: enforce(forgotPasswordByAccount),
     schema: {
       summary: 'Demander un lien de réinitialisation de mot de passe par email',
