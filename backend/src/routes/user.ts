@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs'
 import type { FastifyInstance } from 'fastify'
-import { decryptEmail, decryptValue } from '../utils/crypto.js'
+import { decryptEmail, decryptValue, encryptValue } from '../utils/crypto.js'
 import { centsToDecimal, toCsv } from '../utils/csv.js'
 import { evaluatePassword, weakPasswordMessage } from '../utils/passwordStrength.js'
 import { clearSession, issueSession } from '../utils/session.js'
-import { BCRYPT_ROUNDS } from './auth.js'
+import { BCRYPT_ROUNDS, DEFAULT_CATEGORIES } from './auth.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { TITLE_USAGE, AMOUNT_USAGE } from './transactions.js'
 
@@ -115,6 +115,46 @@ export default async function userRoutes(fastify: FastifyInstance) {
     clearSession(reply)
 
     return reply.code(200).send({ deleted: true })
+  })
+
+  // ── DELETE /api/user/data ────────────────────────────────
+  // Réinitialise le compte : transactions, charges fixes, catégories et
+  // enveloppes supprimées, catégories par défaut ré-amorcées (comme à
+  // l'inscription) — le compte et le mot de passe sont conservés. Le mot de
+  // passe n'est pas redemandé : contrairement à la suppression du compte,
+  // rien d'irrécupérable en dehors des données elles-mêmes n'est en jeu
+  // (l'interface fait déjà saisir un mot de confirmation avant d'appeler
+  // cette route).
+  fastify.delete('/api/user/data', {
+    schema: {
+      summary: 'Réinitialiser les données du compte (catégories, transactions, charges fixes, enveloppes)',
+      tags: ['user'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: { type: 'object', properties: { reset: { type: 'boolean' } } },
+        401: errorSchema,
+      },
+    },
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
+    const userId = req.user.userId
+
+    await fastify.prisma.$transaction([
+      fastify.prisma.transaction.deleteMany({ where: { userId } }),
+      fastify.prisma.recurringTransaction.deleteMany({ where: { userId } }),
+      fastify.prisma.envelope.deleteMany({ where: { userId } }),
+      fastify.prisma.category.deleteMany({ where: { userId } }),
+      fastify.prisma.category.createMany({
+        data: DEFAULT_CATEGORIES.map((category, position) => ({
+          userId,
+          nameEncrypted: encryptValue(category.name, CATEGORY_USAGE),
+          color:         category.color,
+          position,
+        })),
+      }),
+    ])
+
+    return reply.code(200).send({ reset: true })
   })
 
   // ── PUT /api/user/password ──────────────────────────────
