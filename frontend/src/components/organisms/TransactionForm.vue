@@ -15,6 +15,7 @@ import TypeToggle  from '@/components/molecules/TypeToggle.vue'
 import { useDirtyForm } from '@/composables/useDirtyForm.js'
 import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
+import { useCoinDropStore }     from '@/stores/coinDrop.store.js'
 import { useToastStore }        from '@/stores/toast.store.js'
 import { parseAmountToCents, todayISO } from '@/utils/format.js'
 
@@ -27,6 +28,7 @@ const emit = defineEmits(['saved', 'deleted', 'cancel'])
 
 const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
+const coinDrop      = useCoinDropStore()
 const toasts       = useToastStore()
 
 const isEdit = computed(() => !!props.transaction)
@@ -83,6 +85,7 @@ async function submit() {
       : await transactions.create(payload)
 
     toasts.success(isEdit.value ? 'Transaction modifiée.' : 'Transaction ajoutée.')
+    if (!isEdit.value) coinDrop.trigger()
     emit('saved', saved)
   } catch (err) {
     errors.value.global = err.message
