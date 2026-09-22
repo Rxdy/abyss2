@@ -46,6 +46,16 @@ export function createEnvelope(userId: string) {
   })
 }
 
+export function createNotification(userId: string, data: { type?: string; envelopeId?: string } = {}) {
+  return prisma.notification.create({
+    data: {
+      userId,
+      type: data.type ?? 'envelope_overspend',
+      envelopeId: data.envelopeId ?? null,
+    },
+  })
+}
+
 export function createTransaction(userId: string, data: { categoryId?: string; recurringId?: string; type?: string } = {}) {
   return prisma.transaction.create({
     data: {

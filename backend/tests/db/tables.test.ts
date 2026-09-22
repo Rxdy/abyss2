@@ -25,6 +25,12 @@ const EXPECTED: Record<string, Spec> = {
     name_encrypted: ['text', false], budget_encrypted: ['text', false],
     created_at: [TS, false], updated_at: [TS, false],
   },
+  notifications: {
+    id: ['uuid', false], user_id: ['uuid', false], type: ['character varying', false, 30],
+    envelope_id: ['uuid', true], count: ['integer', true],
+    read: ['boolean', false], archived: ['boolean', false],
+    created_at: [TS, false],
+  },
   transactions: {
     id: ['uuid', false], user_id: ['uuid', false], category_id: ['uuid', true], recurring_id: ['uuid', true],
     title_encrypted: ['text', false], amount_encrypted: ['text', false],
@@ -95,8 +101,15 @@ describe('valeurs par défaut', () => {
 
       expect(columns.id.hasDefault, `${table}.id`).toBe(true)
       expect(columns.created_at.hasDefault, `${table}.created_at`).toBe(true)
-      expect(columns.updated_at.hasDefault, `${table}.updated_at`).toBe(true)
+      // notifications n'a pas de updated_at : jamais modifiée en place au sens du contenu.
+      if (columns.updated_at) expect(columns.updated_at.hasDefault, `${table}.updated_at`).toBe(true)
     }
+  })
+
+  it('une notification part non lue et non archivée', async () => {
+    const columns = await columnsOf('notifications')
+    expect(columns.read.hasDefault).toBe(true)
+    expect(columns.archived.hasDefault).toBe(true)
   })
 
   it('une transaction est une dépense par défaut, une charge fixe est active', async () => {
