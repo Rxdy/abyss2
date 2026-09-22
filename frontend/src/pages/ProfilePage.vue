@@ -118,6 +118,15 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
+
+      <RouterLink to="/profile/envelopes" class="profile__setting">
+        <BaseIcon name="mail" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Enveloppes</BaseText>
+          <BaseText size="xs" color="muted">Plafonds mensuels par groupe de catégories</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
     </nav>
 
     <!-- Mes données : export -->

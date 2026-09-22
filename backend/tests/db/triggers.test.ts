@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { prisma, createUser, createCategory, createTransaction, createRecurring, cleanup } from './helpers.js'
+import { prisma, createUser, createCategory, createTransaction, createRecurring, createEnvelope, cleanup } from './helpers.js'
 
 const PREFIX = 'testtrg'
 let userId: string
@@ -52,6 +52,12 @@ describe('trigger updated_at', () => {
     expect(after.getTime()).toBeGreaterThan(before.getTime())
   })
 
+  it('envelopes', async () => {
+    const row = await createEnvelope(userId)
+    const { before, after } = await touch('envelopes', row.id, `name_encrypted = 'iv:tag:renamed'`)
+    expect(after.getTime()).toBeGreaterThan(before.getTime())
+  })
+
   it('ne modifie pas created_at', async () => {
     const row = await createTransaction(userId)
     await wait(20)
@@ -74,7 +80,7 @@ describe('trigger updated_at', () => {
     `
     const byTable = Object.fromEntries(rows.map((r) => [r.table_name, r.function_name]))
 
-    for (const table of ['users', 'categories', 'transactions', 'recurring_transactions']) {
+    for (const table of ['users', 'categories', 'transactions', 'recurring_transactions', 'envelopes']) {
       expect(byTable[table], table).toBe('set_updated_at')
     }
   })

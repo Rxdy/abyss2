@@ -47,10 +47,11 @@ vi.mock('@/components/molecules/TimeseriesChart.vue', () => ({
 }))
 
 /** Répond selon l'URL appelée ; renvoie le mock pour inspecter les requêtes. */
-function mockApi({ summary = SUMMARY, categories = [], stats = STATS, recurring = [] } = {}) {
+function mockApi({ summary = SUMMARY, categories = [], stats = STATS, recurring = [], envelopes = [] } = {}) {
   const fetchMock = vi.fn().mockImplementation((url) => {
     const { pathname, searchParams } = new URL(url)
     const body = pathname === '/api/categories' ? categories
+      : pathname === '/api/envelopes' ? envelopes
       : pathname === '/api/recurring' ? recurring
       : pathname === '/api/stats' ? stats
       : { ...summary, month: searchParams.get('month') ?? summary.month } // comme l'API : le mois demandé
@@ -261,6 +262,53 @@ describe('HomePage — budgets', () => {
   })
 })
 
+describe('HomePage — enveloppes', () => {
+  const ENVELOPES = [
+    { id: 'e1', name: 'Vie quotidienne', budget: 40000, categoryIds: ['c1'] },
+    { id: 'e2', name: 'Loisirs', budget: 8000, categoryIds: ['c2'] },
+  ]
+
+  it('n\'affiche pas la rubrique tant qu\'aucune enveloppe n\'existe', async () => {
+    mockApi()
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.text()).not.toContain('Enveloppes')
+  })
+
+  it('une jauge par enveloppe, avec le dépensé cumulé de ses catégories', async () => {
+    mockApi({ envelopes: ENVELOPES })
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.text()).toContain('Enveloppes')
+    expect(w.findAll('.budget')).toHaveLength(2)
+    // c1 (Alimentation) : 360 € dépensés — voir STATS
+    expect(w.text()).toMatch(/360,00\s€\s\/\s400,00\s€/)
+  })
+
+  it('alerte quand le total alloué dépasse les revenus réels du mois, sans bloquer', async () => {
+    mockApi({ envelopes: [{ id: 'e1', name: 'Trop', budget: 999999, categoryIds: [] }] })
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.find('[role="alert"]').text()).toContain('libre à vous de continuer')
+    expect(w.findAll('.budget')).toHaveLength(1)
+  })
+
+  it('pas d\'alerte quand l\'allocation reste sous les revenus du mois', async () => {
+    mockApi({ envelopes: ENVELOPES }) // 480 € alloués, 500 € de revenus (SUMMARY.monthIncome)
+
+    const w = mount(HomePage)
+    await flushPromises()
+
+    expect(w.find('[role="alert"]').exists()).toBe(false)
+  })
+})
+
 describe('HomePage — courbe du mois', () => {
   it('affiche la courbe des dépenses quand le mois en compte', async () => {
     mockApi()
@@ -286,7 +334,7 @@ describe('HomePage — courbe du mois', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
       const { pathname } = new URL(url)
       if (pathname === '/api/stats') return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'boom' }) })
-      return Promise.resolve({ ok: true, status: 200, json: async () => (pathname === '/api/categories' || pathname === '/api/recurring' ? [] : SUMMARY) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => (['/api/categories', '/api/recurring', '/api/envelopes'].includes(pathname) ? [] : SUMMARY) })
     }))
 
     const w = mount(HomePage)

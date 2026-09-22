@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { WARN_AT, budgetStatus, buildBudgets, spentByCategory } from '@/utils/budget.js'
+import { WARN_AT, budgetStatus, buildBudgets, buildEnvelopes, spentByCategory } from '@/utils/budget.js'
 
 describe('budgetStatus', () => {
   it('large : « ok », avec ce qui reste', () => {
@@ -112,5 +112,48 @@ describe('buildBudgets', () => {
     )
 
     expect(list[0]).toMatchObject({ spent: 4000, percent: 80, status: 'warn' })
+  })
+})
+
+describe('buildEnvelopes', () => {
+  const ENVELOPES = [
+    { id: 'e1', name: 'Vie quotidienne', budget: 50000, categoryIds: ['food', 'fun'] },
+    { id: 'e2', name: 'Logement', budget: 10000, categoryIds: ['rent'] },
+  ]
+  const STATS = [
+    { id: 'food', amount: 30000, children: [{ id: 'resto', amount: 4000 }] },
+    { id: 'fun', amount: 12000, children: [] },
+    { id: 'rent', amount: 999, children: [] },
+  ]
+
+  it('somme le dépensé de toutes les catégories liées', () => {
+    const [vie, logement] = buildEnvelopes(ENVELOPES, STATS).sort((a, b) => a.id.localeCompare(b.id))
+
+    expect(vie).toMatchObject({ id: 'e1', name: 'Vie quotidienne', budget: 50000, spent: 42000 })
+    expect(logement).toMatchObject({ id: 'e2', name: 'Logement', budget: 10000, spent: 999 })
+  })
+
+  it('sans dépense sur ses catégories : à zéro', () => {
+    const [only] = buildEnvelopes([ENVELOPES[1]], [])
+    expect(only.spent).toBe(0)
+    expect(only.status).toBe('ok')
+  })
+
+  it('une catégorie sans dépense ce mois-ci compte pour zéro', () => {
+    const [only] = buildEnvelopes([{ id: 'e3', name: 'Vide', budget: 1000, categoryIds: ['inconnue'] }], STATS)
+    expect(only.spent).toBe(0)
+  })
+
+  it('les plus avancées d\'abord, dépassements en tête', () => {
+    expect(buildEnvelopes(ENVELOPES, STATS).map((e) => e.id)).toEqual(['e1', 'e2'])
+  })
+
+  it('à égalité, ordre alphabétique', () => {
+    const list = buildEnvelopes(
+      [{ id: 'b', name: 'Zèbre', budget: 100, categoryIds: [] }, { id: 'a', name: 'Abeille', budget: 100, categoryIds: [] }],
+      [],
+    )
+
+    expect(list.map((e) => e.name)).toEqual(['Abeille', 'Zèbre'])
   })
 })

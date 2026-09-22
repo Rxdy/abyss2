@@ -17,7 +17,12 @@ const EXPECTED: Record<string, Spec> = {
   categories: {
     id: ['uuid', false], user_id: ['uuid', false], parent_id: ['uuid', true],
     name_encrypted: ['text', false], color: ['character varying', true, 7], position: ['integer', true],
-    budget_encrypted: ['text', true],
+    budget_encrypted: ['text', true], envelope_id: ['uuid', true],
+    created_at: [TS, false], updated_at: [TS, false],
+  },
+  envelopes: {
+    id: ['uuid', false], user_id: ['uuid', false],
+    name_encrypted: ['text', false], budget_encrypted: ['text', false],
     created_at: [TS, false], updated_at: [TS, false],
   },
   transactions: {
@@ -71,6 +76,15 @@ describe('confidentialité des colonnes', () => {
 
     expect(names).toContain('name_encrypted')
     expect(names).not.toContain('name')
+  })
+
+  it('chiffre le nom et le montant alloué des enveloppes', async () => {
+    const names = Object.keys(await columnsOf('envelopes'))
+
+    expect(names).toContain('name_encrypted')
+    expect(names).toContain('budget_encrypted')
+    expect(names).not.toContain('name')
+    expect(names).not.toContain('budget')
   })
 })
 
