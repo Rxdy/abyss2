@@ -19,9 +19,14 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user: { findUnique: vi.fn(), create: vi.fn(), delete: vi.fn(), update: vi.fn() },
+    user:                { findUnique: vi.fn(), create: vi.fn(), delete: vi.fn(), update: vi.fn() },
+    transaction:         { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    recurringTransaction: { deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+    envelope:            { deleteMany: vi.fn() },
+    category:            { deleteMany: vi.fn(), createMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     $disconnect: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue([]),
+    $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
@@ -141,6 +146,37 @@ describe('DELETE /api/user', () => {
 
     expect(res.statusCode).toBe(401)
     expect(mockPrisma.user.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('DELETE /api/user/data', () => {
+  const resetData = (headers: Record<string, string> = {}) =>
+    app.inject({ method: 'DELETE', url: '/api/user/data', headers })
+
+  it('200 — vide transactions, charges fixes, enveloppes et catégories, puis ré-amorce les catégories par défaut', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ tokenVersion: 0 })
+
+    const res = await resetData({ authorization: `Bearer ${token}` })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ reset: true })
+
+    expect(mockPrisma.transaction.deleteMany).toHaveBeenCalledWith({ where: { userId: 'uuid-test-user' } })
+    expect(mockPrisma.recurringTransaction.deleteMany).toHaveBeenCalledWith({ where: { userId: 'uuid-test-user' } })
+    expect(mockPrisma.envelope.deleteMany).toHaveBeenCalledWith({ where: { userId: 'uuid-test-user' } })
+    expect(mockPrisma.category.deleteMany).toHaveBeenCalledWith({ where: { userId: 'uuid-test-user' } })
+
+    const { data } = mockPrisma.category.createMany.mock.calls[0][0]
+    expect(data).toHaveLength(8) // DEFAULT_CATEGORIES
+    expect(data.every((c: any) => c.userId === 'uuid-test-user')).toBe(true)
+  })
+
+  it('401 — sans token, ne touche à rien', async () => {
+    const res = await resetData()
+
+    expect(res.statusCode).toBe(401)
+    expect(mockPrisma.transaction.deleteMany).not.toHaveBeenCalled()
+    expect(mockPrisma.category.deleteMany).not.toHaveBeenCalled()
   })
 })
 
