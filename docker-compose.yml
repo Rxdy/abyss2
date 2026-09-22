@@ -76,6 +76,7 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./backend/scripts:/app/scripts
+      - ./backend/assets:/app/assets
       - ./backend/prisma:/app/prisma
       - ./backend/tests:/app/tests
       - ./backend/vitest.config.ts:/app/vitest.config.ts
