@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { prisma, createUser, createCategory, createTransaction, createRecurring, createResetToken, createEnvelope, cleanup } from './helpers.js'
+import { prisma, createUser, createCategory, createTransaction, createRecurring, createResetToken, createEnvelope, createNotification, cleanup } from './helpers.js'
 
 const PREFIX = 'testcas'
 
@@ -27,6 +27,7 @@ describe('suppression d\'un utilisateur (droit à l\'effacement)', () => {
     await createTransaction(alice.id)
     await createResetToken(alice.id)
     await createEnvelope(alice.id)
+    await createNotification(alice.id)
     const bobCategory = await createCategory(bob.id)
     await createTransaction(bob.id, { categoryId: bobCategory.id })
 
@@ -36,7 +37,7 @@ describe('suppression d\'un utilisateur (droit à l\'effacement)', () => {
       (await prisma.$queryRawUnsafe<{ n: bigint }[]>(`SELECT COUNT(*) AS n FROM dbo.${table} WHERE user_id = $1::uuid`, id))[0].n,
     )
 
-    for (const table of ['categories', 'transactions', 'recurring_transactions', 'password_reset_tokens', 'envelopes']) {
+    for (const table of ['categories', 'transactions', 'recurring_transactions', 'password_reset_tokens', 'envelopes', 'notifications']) {
       expect(await remaining(table, alice.id), `${table} d'Alice`).toBe(0)
     }
     expect(await remaining('categories', bob.id)).toBe(1)
@@ -54,6 +55,18 @@ describe('suppression d\'une enveloppe', () => {
     await prisma.envelope.delete({ where: { id: envelope.id } })
 
     const after = await prisma.category.findUnique({ where: { id: category.id } })
+    expect(after).not.toBeNull()
+    expect(after!.envelopeId).toBeNull()
+  })
+
+  it('conserve les notifications liées, devenues génériques (envelope_id détaché)', async () => {
+    const user = await createUser(PREFIX, 'envnotif')
+    const envelope = await createEnvelope(user.id)
+    const notification = await createNotification(user.id, { envelopeId: envelope.id })
+
+    await prisma.envelope.delete({ where: { id: envelope.id } })
+
+    const after = await prisma.notification.findUnique({ where: { id: notification.id } })
     expect(after).not.toBeNull()
     expect(after!.envelopeId).toBeNull()
   })

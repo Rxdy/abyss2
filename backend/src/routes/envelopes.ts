@@ -249,3 +249,5 @@ export default async function envelopeRoutes(fastify: FastifyInstance) {
     return reply.code(200).send({ id: req.params.id, deleted: true })
   })
 }
+
+export { NAME_USAGE as ENVELOPE_NAME_USAGE }

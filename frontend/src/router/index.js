@@ -43,6 +43,12 @@ const routes = [
     meta: { layout: 'default', title: 'Transactions', requiresAuth: true }
   },
   {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/pages/NotificationsPage.vue'),
+    meta: { layout: 'default', title: 'Notifications', requiresAuth: true }
+  },
+  {
     path: '/stats',
     name: 'stats',
     component: () => import('@/pages/StatsPage.vue'),

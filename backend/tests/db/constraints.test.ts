@@ -83,6 +83,22 @@ describe('clés étrangères', () => {
     )
     expect(error).toMatch(/categories_envelope_id_fkey/)
   })
+
+  it('refuse une notification rattachée à un utilisateur inexistant', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.notifications (user_id, type) VALUES ($1::uuid, 'envelope_overspend')`,
+      '00000000-0000-0000-0000-000000000000',
+    )
+    expect(error).toMatch(/notifications_user_id_fkey/)
+  })
+
+  it('refuse une notification rattachée à une enveloppe inexistante', async () => {
+    const error = await sqlError(
+      `INSERT INTO dbo.notifications (user_id, type, envelope_id) VALUES ($1::uuid, 'envelope_overspend', $2::uuid)`,
+      userId, '00000000-0000-0000-0000-000000000000',
+    )
+    expect(error).toMatch(/notifications_envelope_id_fkey/)
+  })
 })
 
 describe('colonnes obligatoires', () => {
@@ -126,6 +142,11 @@ describe('colonnes obligatoires', () => {
     const error = await sqlError(
       `INSERT INTO dbo.envelopes (user_id, name_encrypted) VALUES ($1::uuid, 'x')`, userId,
     )
+    expect(error).toMatch(NOT_NULL_VIOLATION)
+  })
+
+  it('refuse une notification sans type', async () => {
+    const error = await sqlError(`INSERT INTO dbo.notifications (user_id) VALUES ($1::uuid)`, userId)
     expect(error).toMatch(NOT_NULL_VIOLATION)
   })
 
@@ -237,6 +258,16 @@ describe('contraintes CHECK', () => {
   it('refuse un token_version négatif', async () => {
     expect(await sqlError(`UPDATE dbo.users SET token_version = -1 WHERE id = $1::uuid`, userId))
       .toMatch(/chk_users_token_version/)
+  })
+
+  it.each(['envelope_overspend', 'uncategorized_digest'])('accepte le type de notification « %s »', async (type) => {
+    expect(await sqlError(`INSERT INTO dbo.notifications (user_id, type) VALUES ($1::uuid, $2)`, userId, type))
+      .toBeNull()
+  })
+
+  it.each(['', 'other', 'ENVELOPE_OVERSPEND'])('refuse le type de notification « %s »', async (type) => {
+    expect(await sqlError(`INSERT INTO dbo.notifications (user_id, type) VALUES ($1::uuid, $2)`, userId, type))
+      .toMatch(/chk_notifications_type/)
   })
 })
 
