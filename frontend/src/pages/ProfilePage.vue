@@ -9,6 +9,7 @@ import BaseIcon      from '@/components/atoms/BaseIcon.vue'
 import AlertBanner from '@/components/molecules/AlertBanner.vue'
 import DangerZone   from '@/components/organisms/DangerZone.vue'
 import FormModal    from '@/components/organisms/FormModal.vue'
+import ResetDataButton from '@/components/organisms/ResetDataButton.vue'
 import PasswordChangeForm from '@/components/organisms/PasswordChangeForm.vue'
 import { todayISO } from '@/utils/format.js'
 
@@ -147,6 +148,8 @@ onMounted(loadProfile)
         <BaseIcon name="download" :size="18" />
         {{ option.label }}
       </BaseButton>
+
+      <ResetDataButton />
     </section>
 
     <BaseButton variant="secondary" full @click="passwordOpen = true">
