@@ -1,0 +1,85 @@
+# Recouvrement de production — utilisé EN PLUS de docker-compose.yml, jamais seul :
+#
+#   make up-prod
+#   # équivalent à :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Ce que ça change par rapport au développement :
+#   - le front est buildé (vite build) et servi par nginx, plus par le serveur de dev de Vite ;
+#   - l'API tourne sans watcher (`npm start`) ni volumes montés — le code vient de l'image ;
+#   - front et API ne publient plus de port sur l'hôte : seul Traefik les atteint, sur le réseau
+#     Docker externe déclaré ci-dessous. C'est lui qui termine le TLS (l'installation de la PWA
+#     l'exige hors localhost) et route un seul domaine : /api vers l'API, le reste vers le front —
+#     même origine, condition nécessaire au cookie de session httpOnly (voir ARCHITECTURE.md).
+#
+# Suppose Traefik déjà en place sur ce serveur (routeur dynamique Docker, résolveur de
+# certificats configuré) et joignable depuis ce projet via le réseau externe $TRAEFIK_NETWORK.
+# Variables à définir dans .env : DOMAIN (nom de domaine public), TRAEFIK_NETWORK (nom du réseau
+# Docker de Traefik, "traefik" par défaut), TRAEFIK_CERT_RESOLVER (nom du résolveur de
+# certificats configuré côté Traefik, "letsencrypt" par défaut).
+
+services:
+  api:
+    environment:
+      NODE_ENV: production
+      FRONTEND_URL: https://${DOMAIN}
+      CHOKIDAR_USEPOLLING: ""
+      CHOKIDAR_INTERVAL: ""
+    command: sh -c "npx prisma migrate deploy && npm start"
+    # `!reset` : ces listes existent côté développement (port publié, sources montées en direct) ;
+    # sans lui, Compose les FUSIONNE au lieu de les remplacer, et la prod garde les deux.
+    ports: !reset []
+    volumes: !reset []
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.services.abyss2-api.loadbalancer.server.port=3000
+      - traefik.http.routers.abyss2-api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.routers.abyss2-api.priority=10
+      - traefik.http.routers.abyss2-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.abyss2-api.tls=true
+      - traefik.http.routers.abyss2-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+    networks:
+      - abyss2_network
+      - traefik
+
+  frontend:
+    # Nom distinct de l'image de développement (« abyss2-frontend », Dockerfile Vite) : sans ça,
+    # ce build nginx écraserait son tag, et `make up` redémarrerait nginx au lieu du serveur Vite.
+    image: abyss2-frontend-prod
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Même origine que l'API derrière Traefik : URL relative, pas de host/port en dur.
+        VITE_API_URL: ""
+    ports: !reset []
+    volumes: !reset []
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      - traefik.http.services.abyss2-frontend.loadbalancer.server.port=80
+      - traefik.http.routers.abyss2-frontend.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.abyss2-frontend.priority=1
+      - traefik.http.routers.abyss2-frontend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.abyss2-frontend.tls=true
+      - traefik.http.routers.abyss2-frontend.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+    networks:
+      - abyss2_network
+      - traefik
+
+  # Jamais sur le réseau Traefik : seuls front et API doivent être joignables depuis l'extérieur.
+  postgres:
+    ports: !reset []
+
+  # Mailpit ne sert qu'à intercepter les emails en développement (voir docker-compose.yml) : lui
+  # donner un profil qu'aucune commande ne demande ici l'exclut de `make up-prod`. La production
+  # parle à un vrai relais SMTP via les variables SMTP_* (voir .env.example) — l'API ne sait pas
+  # lequel des deux elle utilise, seule la configuration change.
+  mailpit:
+    profiles: ["dev-tools"]
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

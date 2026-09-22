@@ -110,3 +110,15 @@ export function encryptEmail(email: string) {
 export function decryptEmail(encryptedEmail: string) {
   return decryptValue(encryptedEmail, 'email-encryption')
 }
+
+// ── Jetons à usage unique (réinitialisation de mot de passe) ──
+
+/**
+ * Hash SHA-256 d'un jeton de haute entropie (32 octets aléatoires, voir routes/auth.ts).
+ * Contrairement à `hashEmail`, pas besoin de HMAC ici : le jeton n'est pas devinable par
+ * dictionnaire (contrairement à un email), un simple hash suffit à empêcher qu'une fuite de la
+ * base (qui ne contient que ce hash) permette de rejouer le lien envoyé par email.
+ */
+export function hashToken(token: string) {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}

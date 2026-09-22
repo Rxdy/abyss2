@@ -8,3 +8,7 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Tests de bout en bout (Playwright)
+test-results/
+playwright-report/

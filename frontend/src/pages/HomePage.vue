@@ -1,64 +1,152 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import BaseText   from '@/components/atoms/BaseText.vue'
 import BaseButton from '@/components/atoms/BaseButton.vue'
 import BaseIcon   from '@/components/atoms/BaseIcon.vue'
+import FabButton  from '@/components/atoms/FabButton.vue'
+import AlertBanner      from '@/components/molecules/AlertBanner.vue'
 import BalanceCard      from '@/components/molecules/BalanceCard.vue'
-import TransactionList  from '@/components/organisms/TransactionList.vue'
+import BudgetList       from '@/components/molecules/BudgetList.vue'
+import MonthNav         from '@/components/molecules/MonthNav.vue'
+import TimeseriesChart  from '@/components/molecules/TimeseriesChart.vue'
+import UpcomingList     from '@/components/molecules/UpcomingList.vue'
+import FormModal        from '@/components/organisms/FormModal.vue'
 import TransactionForm  from '@/components/organisms/TransactionForm.vue'
-import { useTransactionsStore } from '@/stores/transactions.store.js'
+import TransactionList  from '@/components/organisms/TransactionList.vue'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
+import { useRecurringStore }    from '@/stores/recurring.store.js'
+import { useStatsStore }        from '@/stores/stats.store.js'
+import { useTransactionsStore } from '@/stores/transactions.store.js'
+import { buildBudgets } from '@/utils/budget.js'
+import { monthRange }   from '@/utils/period.js'
 
 const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
+const recurring    = useRecurringStore()
+const stats        = useStatsStore()
 
-const showForm = ref(false)
+/** Mois affiché : null tant qu'on n'a rien choisi (l'API répond alors avec le mois courant). */
+const selectedMonth = ref(null)
+const month = computed(() => selectedMonth.value ?? transactions.summary.month)
 
+/** Modale de saisie : ouverte pour créer (`editing` null) ou pour modifier la ligne touchée. */
+const modalOpen = ref(false)
+const editing   = ref(null)
+
+function openCreate() {
+  editing.value   = null
+  modalOpen.value = true
+}
+
+function openEdit(transaction) {
+  editing.value   = transaction
+  modalOpen.value = true
+}
+
+function closeModal() {
+  modalOpen.value = false
+  editing.value   = null
+}
+
+/** Recharge tout ce qui dépend du mois affiché. Les statistiques sont un bonus : leur échec ne se voit pas. */
 async function refresh() {
-  await transactions.fetchSummary().catch(() => {})
+  await transactions.fetchSummary({ month: selectedMonth.value ?? '' }).catch(() => {})
+
+  if (transactions.summary.month) {
+    const { from, to } = monthRange(transactions.summary.month)
+    stats.fetch({ from, to, type: 'expense' }).catch(() => {})
+  }
 }
 
 function onSaved() {
   refresh()
+  closeModal()
 }
+
+watch(selectedMonth, refresh)
+
+// ── Budgets, courbe du mois, prochaines échéances ──────────────────────────
+const budgets = computed(() => buildBudgets(categories.items, stats.data.categories))
+
+/** Compte vide : on invite à commencer ; sinon, le mois affiché n'a simplement rien. */
+const emptyLabel = computed(() =>
+  transactions.summary.count === 0
+    ? 'Aucune transaction — commencez par en ajouter une.'
+    : 'Aucune transaction ce mois-ci.',
+)
+
+const hasMonthSpending = computed(() => !stats.loading && stats.data.total > 0)
+
+/** Les 3 prochaines échéances, indépendamment du mois affiché. */
+const upcoming = computed(() =>
+  recurring.active
+    .filter((item) => item.nextDate)
+    .sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+    .slice(0, 3),
+)
 
 onMounted(() => {
   refresh()
-  // Nécessaires au formulaire d'ajout
   categories.fetchAll().catch(() => {})
+  recurring.fetchAll().catch(() => {})
 })
 </script>
 
 <template>
   <section class="home">
-    <!-- Récapitulatif -->
+    <!-- Solde global, puis le mois affiché -->
     <BalanceCard
       :balance="transactions.summary.balance"
       :month-income="transactions.summary.monthIncome"
       :month-expense="transactions.summary.monthExpense"
-      :month="transactions.summary.month"
-    />
+    >
+      <template #month>
+        <MonthNav
+          v-if="month"
+          :model-value="month"
+          :min="transactions.summary.firstMonth ?? ''"
+          :max="transactions.summary.currentMonth"
+          @update:model-value="selectedMonth = $event"
+        />
+      </template>
+    </BalanceCard>
 
-    <div v-if="transactions.error" class="home__error" role="alert">
-      <BaseText size="sm" color="danger">{{ transactions.error }}</BaseText>
-    </div>
+    <AlertBanner v-if="transactions.error">{{ transactions.error }}</AlertBanner>
 
-    <!-- Ajout rapide -->
-    <BaseButton v-if="!showForm" variant="primary" full @click="showForm = true">
+    <!-- Ajout : bouton flottant sur mobile, bouton pleine largeur sur ordinateur -->
+    <BaseButton class="home__add" variant="primary" full @click="openCreate">
       <BaseIcon name="plus" :size="18" />
       Ajouter une transaction
     </BaseButton>
 
-    <TransactionForm
-      v-else
-      @saved="onSaved"
-      @close="showForm = false"
-    />
+    <!-- Budgets : seulement si au moins une catégorie en a un -->
+    <section v-if="budgets.length" class="home__section" aria-labelledby="home-budgets">
+      <BaseText id="home-budgets" as="h2" size="lg" weight="semibold" color="primary">Budgets</BaseText>
+      <div class="home__card"><BudgetList :budgets="budgets" /></div>
+    </section>
 
-    <!-- Dernières transactions -->
-    <div class="home__section">
+    <!-- Courbe des dépenses du mois -->
+    <section v-if="hasMonthSpending" class="home__section" aria-labelledby="home-chart">
+      <BaseText id="home-chart" as="h2" size="lg" weight="semibold" color="primary">Dépenses du mois</BaseText>
+      <div class="home__card"><TimeseriesChart :timeseries="stats.data.timeseries" type="expense" /></div>
+    </section>
+
+    <!-- Prochaines charges fixes -->
+    <section v-if="upcoming.length" class="home__section" aria-labelledby="home-upcoming">
       <div class="home__section-head">
-        <BaseText as="h2" size="lg" weight="semibold" color="primary">
+        <BaseText id="home-upcoming" as="h2" size="lg" weight="semibold" color="primary">Prochaines échéances</BaseText>
+        <RouterLink to="/recurring" class="home__link">
+          <BaseText size="sm" color="brand" weight="medium">Tout voir</BaseText>
+          <BaseIcon name="chevron" :size="16" />
+        </RouterLink>
+      </div>
+      <div class="home__card"><UpcomingList :items="upcoming" /></div>
+    </section>
+
+    <!-- Dernières transactions du mois -->
+    <section class="home__section" aria-labelledby="home-recent">
+      <div class="home__section-head">
+        <BaseText id="home-recent" as="h2" size="lg" weight="semibold" color="primary">
           Dernières transactions
         </BaseText>
         <RouterLink to="/transactions" class="home__link">
@@ -70,14 +158,26 @@ onMounted(() => {
       <TransactionList
         :transactions="transactions.summary.recent"
         :loading="transactions.loading"
-        empty-label="Aucune transaction — commencez par en ajouter une."
+        clickable
+        :empty-label="emptyLabel"
+        @select="openEdit"
       />
-    </div>
+    </section>
 
-    <!-- Zone libre : à définir -->
-    <div class="home__placeholder">
-      <BaseText size="xs" color="muted">D'autres blocs viendront ici.</BaseText>
-    </div>
+    <FabButton label="Ajouter une transaction" @click="openCreate" />
+
+    <FormModal
+      v-if="modalOpen"
+      :title="editing ? 'Modifier la transaction' : 'Nouvelle transaction'"
+      @close="closeModal"
+    >
+      <TransactionForm
+        :transaction="editing"
+        @saved="onSaved"
+        @deleted="onSaved"
+        @cancel="closeModal"
+      />
+    </FormModal>
   </section>
 </template>
 
@@ -91,11 +191,10 @@ onMounted(() => {
   width: 100%;
 }
 
-.home__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+.home__add { display: none; }
+
+@media (min-width: 1024px) {
+  .home__add { display: inline-flex; }
 }
 
 .home__section {
@@ -111,17 +210,17 @@ onMounted(() => {
   gap: var(--space-3);
 }
 
+.home__card {
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
 .home__link {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   color: var(--color-primary);
-}
-
-.home__placeholder {
-  padding: var(--space-6);
-  text-align: center;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
 }
 </style>

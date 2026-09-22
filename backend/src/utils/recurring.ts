@@ -11,6 +11,8 @@
  * dépendre du fuseau du serveur.
  */
 
+import type { PrismaClient } from '@prisma/client'
+
 /** Sécurité anti-boucle infinie si des dates aberrantes se glissaient quelque part. */
 const MAX_CATCHUP_MONTHS = 240 // 20 ans
 
@@ -126,41 +128,44 @@ export function nextOccurrenceDate(recurring: {
 
 /**
  * Génère, pour un utilisateur donné, toutes les transactions dues depuis
- * la dernière génération de chacune de ses charges fixes actives. Traite
- * les modèles séquentiellement (pas de Promise.all) pour limiter le risque
- * de double génération en cas d'appels concurrents.
+ * la dernière génération de chacune de ses charges fixes actives, et renvoie
+ * le nombre de transactions créées.
+ *
+ * Le rattrapage tourne à chaque lecture : deux requêtes simultanées peuvent
+ * calculer les mêmes échéances. L'unicité (charge fixe, date) est garantie par
+ * un index unique en base ; `skipDuplicates` (INSERT … ON CONFLICT DO NOTHING)
+ * fait que la seconde requête saute simplement ce qui existe déjà, sans faire
+ * échouer — ni annuler — sa transaction.
  */
-export async function runDueRecurring(prisma: any, userId: string, { now = new Date() }: { now?: Date } = {}) {
+export async function runDueRecurring(prisma: PrismaClient, userId: string, { now = new Date() }: { now?: Date } = {}) {
   const recurringList = await prisma.recurringTransaction.findMany({
     where: { userId, active: true },
   })
 
-  const created: any[] = []
+  let created = 0
 
   for (const recurring of recurringList) {
     const months = dueMonths(recurring, now)
     if (months.length === 0) continue
 
-    await prisma.$transaction(async (tx: any) => {
-      for (const month of months) {
-        // Le libellé et le montant sont déjà chiffrés sur le modèle récurrent
-        // (même clé/usage que les transactions) : on recopie le ciphertext
-        // tel quel, pas besoin de déchiffrer/re-chiffrer.
-        const transaction = await tx.transaction.create({
-          data: {
-            userId,
-            categoryId:      recurring.categoryId,
-            recurringId:     recurring.id,
-            titleEncrypted:  recurring.titleEncrypted,
-            amountEncrypted: recurring.amountEncrypted,
-            date:            occurrenceDate(month, recurring.dayOfMonth),
-            type:            recurring.type,
-            note:            recurring.note,
-          },
-          include: { category: true },
-        })
-        created.push(transaction)
-      }
+    await prisma.$transaction(async (tx) => {
+      // Le libellé et le montant sont déjà chiffrés sur le modèle récurrent
+      // (même clé/usage que les transactions) : on recopie le ciphertext
+      // tel quel, pas besoin de déchiffrer/re-chiffrer.
+      const { count } = await tx.transaction.createMany({
+        data: months.map((month) => ({
+          userId,
+          categoryId:      recurring.categoryId,
+          recurringId:     recurring.id,
+          titleEncrypted:  recurring.titleEncrypted,
+          amountEncrypted: recurring.amountEncrypted,
+          date:            occurrenceDate(month, recurring.dayOfMonth),
+          type:            recurring.type,
+          note:            recurring.note,
+        })),
+        skipDuplicates: true,
+      })
+      created += count
 
       await tx.recurringTransaction.update({
         where: { id: recurring.id },

@@ -6,8 +6,11 @@ import { useAuthStore } from '@/stores/auth.store.js'
 import BaseText      from '@/components/atoms/BaseText.vue'
 import BaseButton    from '@/components/atoms/BaseButton.vue'
 import BaseIcon      from '@/components/atoms/BaseIcon.vue'
-import BaseInput     from '@/components/atoms/BaseInput.vue'
-import ConfirmDialog from '@/components/molecules/ConfirmDialog.vue'
+import AlertBanner from '@/components/molecules/AlertBanner.vue'
+import DangerZone   from '@/components/organisms/DangerZone.vue'
+import FormModal    from '@/components/organisms/FormModal.vue'
+import PasswordChangeForm from '@/components/organisms/PasswordChangeForm.vue'
+import { todayISO } from '@/utils/format.js'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -16,100 +19,25 @@ const api    = useApi()
 const profile = ref(null)
 const error   = ref('')
 
-// ── Suppression définitive du compte (droit à l'effacement) ──────────────
-const showDeleteAccount = ref(false)
-const deletePassword    = ref('')
-const deleteError       = ref('')
-const deleteLoading     = ref(false)
+const passwordOpen = ref(false)
 
-function askDeleteAccount() {
-  showDeleteAccount.value = true
-  deletePassword.value = ''
-  deleteError.value = ''
-}
+// ── Export des données (portabilité) ─────────────────────────────────────
+const EXPORTS = [
+  { format: 'json', label: 'Tout exporter (JSON)' },
+  { format: 'csv',  label: 'Transactions (CSV)' },
+]
+const exporting   = ref('')
+const exportError = ref('')
 
-async function confirmDeleteAccount() {
-  if (!deletePassword.value) {
-    deleteError.value = 'Le mot de passe est requis.'
-    return
-  }
-
-  deleteLoading.value = true
-  deleteError.value = ''
+async function exportData(format) {
+  exporting.value = format
+  exportError.value = ''
   try {
-    await api.del('/api/user', { password: deletePassword.value })
-    auth.logout()
-    router.push({ name: 'login' })
+    await api.download(`/api/user/export?format=${format}`, `abyss2-${todayISO()}.${format}`)
   } catch (err) {
-    deleteError.value = err.message
+    exportError.value = err.message
   } finally {
-    deleteLoading.value = false
-  }
-}
-
-// ── Changement de mot de passe ────────────────────────────────────────────
-const passwordForm    = ref({ current: '', next: '', confirm: '' })
-const passwordErrors  = ref({ current: '', next: '', confirm: '', global: '' })
-const passwordLoading = ref(false)
-const passwordSuccess = ref('')
-
-function resetPasswordForm() {
-  passwordForm.value = { current: '', next: '', confirm: '' }
-  passwordErrors.value = { current: '', next: '', confirm: '', global: '' }
-}
-
-async function submitPasswordChange() {
-  passwordErrors.value = { current: '', next: '', confirm: '', global: '' }
-  passwordSuccess.value = ''
-  let ok = true
-
-  if (!passwordForm.value.current) {
-    passwordErrors.value.current = 'Requis.'
-    ok = false
-  }
-  if (passwordForm.value.next.length < 8) {
-    passwordErrors.value.next = '8 caractères minimum.'
-    ok = false
-  }
-  if (passwordForm.value.confirm !== passwordForm.value.next) {
-    passwordErrors.value.confirm = 'Ne correspond pas au nouveau mot de passe.'
-    ok = false
-  }
-  if (!ok) return
-
-  passwordLoading.value = true
-  try {
-    const { token } = await api.put('/api/user/password', {
-      currentPassword: passwordForm.value.current,
-      newPassword: passwordForm.value.next,
-    })
-    auth.setToken(token)
-    passwordSuccess.value = 'Mot de passe modifié. Vos autres appareils ont été déconnectés.'
-    resetPasswordForm()
-  } catch (err) {
-    passwordErrors.value.global = err.message
-  } finally {
-    passwordLoading.value = false
-  }
-}
-
-// ── Déconnexion des autres appareils ──────────────────────────────────────
-const devicesLoading = ref(false)
-const devicesMessage = ref('')
-const devicesError   = ref('')
-
-async function revokeOtherDevices() {
-  devicesLoading.value = true
-  devicesMessage.value = ''
-  devicesError.value = ''
-  try {
-    const { token } = await api.post('/api/user/revoke-sessions')
-    auth.setToken(token)
-    devicesMessage.value = 'Tous les autres appareils ont été déconnectés.'
-  } catch (err) {
-    devicesError.value = err.message
-  } finally {
-    devicesLoading.value = false
+    exporting.value = ''
   }
 }
 
@@ -128,8 +56,8 @@ async function loadProfile() {
   }
 }
 
-function logout() {
-  auth.logout()
+async function logout() {
+  await auth.logout()
   router.push({ name: 'login' })
 }
 
@@ -140,9 +68,7 @@ onMounted(loadProfile)
   <section class="profile">
     <BaseText as="h1" size="2xl" weight="bold" color="primary">Profil</BaseText>
 
-    <div v-if="error" class="profile__error" role="alert">
-      <BaseText size="sm" color="danger">{{ error }}</BaseText>
-    </div>
+    <AlertBanner v-if="error">{{ error }}</AlertBanner>
 
     <dl class="profile__list">
       <div class="profile__row">
@@ -192,80 +118,32 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
-
-      <RouterLink to="/profile/recurring" class="profile__setting">
-        <BaseIcon name="clock" :size="18" />
-        <div class="profile__setting-body">
-          <BaseText size="sm" weight="medium" color="primary">Dépenses &amp; revenus fixes</BaseText>
-          <BaseText size="xs" color="muted">Loyer, salaire, abonnements…</BaseText>
-        </div>
-        <BaseIcon name="chevron" :size="18" />
-      </RouterLink>
     </nav>
 
-    <!-- Sécurité : mot de passe -->
+    <!-- Mes données : export -->
     <section class="profile__section">
-      <BaseText as="h2" size="sm" weight="semibold" color="primary">Mot de passe</BaseText>
+      <BaseText as="h2" size="sm" weight="semibold" color="primary">Mes données</BaseText>
 
-      <div v-if="passwordErrors.global" class="profile__error" role="alert">
-        <BaseText size="sm" color="danger">{{ passwordErrors.global }}</BaseText>
-      </div>
-      <div v-if="passwordSuccess" class="profile__success" role="status">
-        <BaseText size="sm" color="success">{{ passwordSuccess }}</BaseText>
-      </div>
+      <AlertBanner v-if="exportError">{{ exportError }}</AlertBanner>
 
-      <form class="profile__form" novalidate @submit.prevent="submitPasswordChange">
-        <BaseInput
-          v-model="passwordForm.current"
-          id="password-current"
-          type="password"
-          label="Mot de passe actuel"
-          :error="passwordErrors.current"
-          required
-        />
-        <BaseInput
-          v-model="passwordForm.next"
-          id="password-next"
-          type="password"
-          label="Nouveau mot de passe"
-          hint="8 caractères minimum."
-          :error="passwordErrors.next"
-          required
-        />
-        <BaseInput
-          v-model="passwordForm.confirm"
-          id="password-confirm"
-          type="password"
-          label="Confirmer le nouveau mot de passe"
-          :error="passwordErrors.confirm"
-          required
-        />
-        <BaseButton type="submit" variant="secondary" :loading="passwordLoading" full>
-          Changer le mot de passe
-        </BaseButton>
-      </form>
-    </section>
-
-    <!-- Sécurité : appareils -->
-    <section class="profile__section">
-      <BaseText as="h2" size="sm" weight="semibold" color="primary">Appareils connectés</BaseText>
-      <BaseText size="xs" color="muted">
-        Changer le mot de passe déconnecte déjà automatiquement les autres
-        appareils. Utile aussi si une session est restée ouverte ailleurs.
-      </BaseText>
-
-      <div v-if="devicesError" class="profile__error" role="alert">
-        <BaseText size="sm" color="danger">{{ devicesError }}</BaseText>
-      </div>
-      <div v-if="devicesMessage" class="profile__success" role="status">
-        <BaseText size="sm" color="success">{{ devicesMessage }}</BaseText>
-      </div>
-
-      <BaseButton variant="secondary" :loading="devicesLoading" full @click="revokeOtherDevices">
-        <BaseIcon name="devices" :size="18" />
-        Déconnecter tous les autres appareils
+      <BaseButton
+        v-for="option in EXPORTS"
+        :key="option.format"
+        variant="secondary"
+        full
+        :loading="exporting === option.format"
+        :disabled="exporting !== ''"
+        @click="exportData(option.format)"
+      >
+        <BaseIcon name="download" :size="18" />
+        {{ option.label }}
       </BaseButton>
     </section>
+
+    <BaseButton variant="secondary" full @click="passwordOpen = true">
+      <BaseIcon name="key" :size="18" />
+      Changer le mot de passe
+    </BaseButton>
 
     <div class="profile__actions">
       <BaseButton class="profile__logout" variant="danger" full @click="logout">
@@ -277,43 +155,11 @@ onMounted(loadProfile)
       </BaseText>
     </div>
 
-    <!-- Zone de danger -->
-    <div class="profile__danger">
-      <BaseText as="h2" size="sm" weight="semibold" color="danger">Zone de danger</BaseText>
-      <BaseText size="xs" color="muted">
-        Supprime définitivement le compte ainsi que toutes les données
-        associées (transactions, catégories, charges fixes). Aucune trace
-        n'est conservée, l'opération est irréversible.
-      </BaseText>
-      <BaseButton variant="danger" full @click="askDeleteAccount">
-        Supprimer mon compte
-      </BaseButton>
-    </div>
+    <DangerZone />
 
-    <ConfirmDialog
-      v-if="showDeleteAccount"
-      title="Supprimer définitivement votre compte ?"
-      confirm-label="Supprimer définitivement"
-      danger
-      :loading="deleteLoading"
-      @cancel="showDeleteAccount = false"
-      @confirm="confirmDeleteAccount"
-    >
-      <BaseText size="sm" color="secondary">
-        Cette action est irréversible : votre compte, vos transactions, vos
-        catégories et vos charges fixes seront supprimés définitivement,
-        sans aucune trace conservée.
-      </BaseText>
-
-      <BaseInput
-        v-model="deletePassword"
-        id="delete-account-password"
-        type="password"
-        label="Confirmez avec votre mot de passe"
-        :error="deleteError"
-        required
-      />
-    </ConfirmDialog>
+    <FormModal v-if="passwordOpen" title="Changer le mot de passe" @close="passwordOpen = false">
+      <PasswordChangeForm @saved="passwordOpen = false" @cancel="passwordOpen = false" />
+    </FormModal>
   </section>
 </template>
 
@@ -327,20 +173,6 @@ onMounted(loadProfile)
   width: 100%;
 }
 
-.profile__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.profile__success {
-  background: var(--color-success-subtle);
-  border: 1px solid var(--color-success);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
 .profile__section {
   display: flex;
   flex-direction: column;
@@ -349,12 +181,6 @@ onMounted(loadProfile)
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-}
-
-.profile__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 .profile__list {
@@ -417,13 +243,4 @@ onMounted(loadProfile)
   gap: var(--space-2);
 }
 
-.profile__danger {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--color-danger);
-  background: var(--color-danger-subtle);
-  border-radius: var(--radius-lg);
-}
 </style>

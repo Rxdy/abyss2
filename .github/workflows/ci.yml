@@ -26,7 +26,11 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - run: npm ci
+      # Dépendances d'exécution seulement : les alertes des outils de test sont suivies à part.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
         env:
           MASTER_SECRET: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -61,10 +65,13 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Initialiser le schéma (postgres/init.sql)
-        run: PGPASSWORD=ci_password psql -h localhost -U abyss2_user -d abyss2_db -f ../postgres/init.sql
-
       - run: npm ci
+
+      - name: Appliquer les migrations (prisma migrate deploy)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://abyss2_user:ci_password@localhost:5432/abyss2_db?schema=dbo
+
       - run: npx prisma generate
       - run: npm run test:db
         env:
@@ -88,5 +95,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint
       - run: npm test
       - run: npm run build

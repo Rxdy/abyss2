@@ -18,6 +18,10 @@ describe('BaseButton', () => {
     expect(w.classes()).toContain('btn--md')
   })
 
+  it('propose une variante accent (couleur secondaire menthe)', () => {
+    expect(mount(BaseButton, { props: { variant: 'accent' } }).classes()).toContain('btn--accent')
+  })
+
   it('applique les classes variant/size demandées', () => {
     const w = mount(BaseButton, { props: { variant: 'danger', size: 'lg' } })
     expect(w.classes()).toEqual(expect.arrayContaining(['btn--danger', 'btn--lg']))
