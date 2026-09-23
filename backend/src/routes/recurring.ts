@@ -12,7 +12,11 @@
  * catégories) : l'historique reste intact.
  */
 
+import type { FastifyInstance } from 'fastify'
+import type { Category, RecurringTransaction } from '@prisma/client'
+import type { TransactionType } from '../types.js'
 import { encryptValue, decryptValue } from '../utils/crypto.js'
+import { todayISO } from '../utils/date.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { TITLE_USAGE, AMOUNT_USAGE, assertCategoryOwned } from './transactions.js'
 import { runDueRecurring, nextOccurrenceDate } from '../utils/recurring.js'
@@ -55,7 +59,7 @@ function formatDate(date: Date) {
 }
 
 /** Ligne Prisma (+ catégorie jointe) → objet exposé par l'API. */
-function toApi(recurring: any) {
+function toApi(recurring: RecurringTransaction & { category?: Category | null }) {
   const next = recurring.active ? nextOccurrenceDate(recurring) : null
 
   return {
@@ -79,7 +83,22 @@ function toApi(recurring: any) {
   }
 }
 
-export default async function recurringRoutes(fastify: any) {
+interface RecurringBody {
+  title?: string
+  /** Centimes, positif */
+  amount?: number
+  type?: TransactionType
+  /** 1 à 31 (ramené au dernier jour du mois si besoin) */
+  dayOfMonth?: number
+  categoryId?: string | null
+  note?: string | null
+  active?: boolean
+  /** yyyy-mm-dd */
+  startDate?: string
+  endDate?: string | null
+}
+
+export default async function recurringRoutes(fastify: FastifyInstance) {
   // ── GET /api/recurring ──────────────────────────────────
   fastify.get('/api/recurring', {
     schema: {
@@ -89,7 +108,7 @@ export default async function recurringRoutes(fastify: any) {
       response: { 200: { type: 'array', items: recurringSchema }, 401: errorSchema },
     },
     preHandler: fastify.authenticate,
-  }, async (req: any) => {
+  }, async (req) => {
     await runDueRecurring(fastify.prisma, req.user.userId)
 
     const recurring = await fastify.prisma.recurringTransaction.findMany({
@@ -102,7 +121,7 @@ export default async function recurringRoutes(fastify: any) {
   })
 
   // ── POST /api/recurring ─────────────────────────────────
-  fastify.post('/api/recurring', {
+  fastify.post<{ Body: RecurringBody & { title: string; amount: number; dayOfMonth: number } }>('/api/recurring', {
     schema: {
       summary: 'Créer une dépense ou un revenu fixe mensuel',
       tags: ['recurring'],
@@ -124,8 +143,8 @@ export default async function recurringRoutes(fastify: any) {
       },
       response: { 201: recurringSchema, 400: errorSchema, 401: errorSchema },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
     const {
       title, amount, type = 'expense', dayOfMonth, categoryId = null, note = null,
       active = true, startDate, endDate = null,
@@ -135,7 +154,7 @@ export default async function recurringRoutes(fastify: any) {
       return reply.code(400).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })
     }
 
-    const start = startDate ? new Date(startDate) : new Date(new Date().toISOString().slice(0, 10))
+    const start = startDate ? new Date(startDate) : new Date(todayISO())
 
     if (endDate && new Date(endDate) < start) {
       return reply.code(400).send({ error: 'La date de fin doit être après la date de début.', code: 'END_BEFORE_START' })
@@ -168,7 +187,7 @@ export default async function recurringRoutes(fastify: any) {
   })
 
   // ── PUT /api/recurring/:id ──────────────────────────────
-  fastify.put('/api/recurring/:id', {
+  fastify.put<{ Params: { id: string }; Body: RecurringBody }>('/api/recurring/:id', {
     schema: {
       summary: 'Modifier une dépense/un revenu fixe (pause via active:false)',
       tags: ['recurring'],
@@ -194,8 +213,8 @@ export default async function recurringRoutes(fastify: any) {
       },
       response: { 200: recurringSchema, 400: errorSchema, 401: errorSchema, 404: errorSchema },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
     const existing = await fastify.prisma.recurringTransaction.findFirst({
       where: { id: req.params.id, userId: req.user.userId },
     })
@@ -244,7 +263,7 @@ export default async function recurringRoutes(fastify: any) {
   })
 
   // ── DELETE /api/recurring/:id ───────────────────────────
-  fastify.delete('/api/recurring/:id', {
+  fastify.delete<{ Params: { id: string } }>('/api/recurring/:id', {
     schema: {
       summary: 'Supprimer une dépense/un revenu fixe (les transactions déjà générées sont conservées)',
       tags: ['recurring'],
@@ -260,8 +279,8 @@ export default async function recurringRoutes(fastify: any) {
         404: errorSchema,
       },
     },
-    preHandler: fastify.authenticate,
-  }, async (req: any, reply: any) => {
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
     const existing = await fastify.prisma.recurringTransaction.findFirst({
       where:  { id: req.params.id, userId: req.user.userId },
       select: { id: true },

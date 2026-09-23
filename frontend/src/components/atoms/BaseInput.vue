@@ -4,8 +4,13 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   modelValue: { type: String, default: '' },
   label:      { type: String, default: '' },
+  hideLabel:  { type: Boolean, default: false },  // libellé lu par les lecteurs d'écran, invisible
   placeholder:{ type: String, default: '' },
   type:       { type: String, default: 'text' },
+  /** 'md' (formulaires) | 'sm' (barres de filtres) */
+  size:       { type: String, default: 'md' },
+  min:        { type: String, default: undefined },
+  max:        { type: String, default: undefined },
   error:      { type: String, default: '' },
   hint:       { type: String, default: '' },
   disabled:   { type: Boolean, default: false },
@@ -24,7 +29,7 @@ const inputType    = computed(() => {
 
 <template>
   <div class="field" :class="{ 'field--error': error, 'field--disabled': disabled }">
-    <label v-if="label" :for="id" class="field__label">
+    <label v-if="label" :for="id" class="field__label" :class="{ 'field__label--hidden': hideLabel }">
       {{ label }}
       <span v-if="required" class="field__required" aria-hidden="true">*</span>
     </label>
@@ -37,10 +42,12 @@ const inputType    = computed(() => {
         :placeholder="placeholder"
         :disabled="disabled"
         :required="required"
+        :min="min"
+        :max="max"
         :aria-describedby="error ? `${id}-error` : hint ? `${id}-hint` : undefined"
         :aria-invalid="!!error"
         class="field__input"
-        :class="{ 'field__input--has-eye': isPassword }"
+        :class="[`field__input--${size}`, { 'field__input--has-eye': isPassword }]"
         @input="$emit('update:modelValue', $event.target.value)"
       />
 
@@ -85,6 +92,15 @@ const inputType    = computed(() => {
   color: var(--color-text-secondary);
 }
 
+.field__label--hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .field__required { color: var(--color-danger); margin-left: var(--space-1); }
 
 .field__input-wrap {
@@ -104,6 +120,13 @@ const inputType    = computed(() => {
   width: 100%;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
+}
+
+.field__input--sm {
+  background: var(--color-bg-surface);
+  padding: var(--space-2) var(--space-3);
+  min-height: 2.25rem;
+  font-size: var(--text-sm);
 }
 
 .field__input--has-eye { padding-right: 2.75rem; }

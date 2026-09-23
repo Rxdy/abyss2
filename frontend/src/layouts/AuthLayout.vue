@@ -1,5 +1,5 @@
 <script setup>
-/* Layout utilisé pour Login (et Register plus tard) — aucun chrome (pas de header/footer) */
+/* Layout utilisé pour Login et Register — aucun chrome (pas de header/footer) */
 </script>
 
 <template>

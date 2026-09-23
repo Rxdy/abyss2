@@ -18,7 +18,15 @@ const PATHS = {
   chevron:'M9 6l6 6-6 6',
   chart:  'M4 20V10M10 20V4M16 20v-7M22 20H2',
   calendar: 'M7 3v3M17 3v3M3.5 8.5h17M4 6h16a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z',
-  devices: 'M4 4h12v9H4z M8 20h4 M9 17v3 M18 10h3v7h-3z',
+  repeat: 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3',
+  trash:  'M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3',
+  pencil: 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4',
+  pause:  'M8 5v14M16 5v14',
+  play:   'M7 4.5v15l12-7.5L7 4.5Z',
+  sun:    'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon:   'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z',
+  download: 'M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16',
+  close:  'M6 6l12 12M18 6 6 18',
 }
 
 const props = defineProps({

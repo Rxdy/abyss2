@@ -1,10 +1,21 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+/*
+ * Formulaire de création / modification d'une transaction, prévu pour vivre
+ * dans une modale (FormModal). `transaction` : à modifier, ou null pour créer.
+ * `saved` / `deleted` / `cancel` préviennent le parent, qui ferme la modale.
+ */
+import { computed, ref } from 'vue'
 import BaseInput  from '@/components/atoms/BaseInput.vue'
 import BaseButton from '@/components/atoms/BaseButton.vue'
 import BaseText   from '@/components/atoms/BaseText.vue'
+import BaseSelect  from '@/components/atoms/BaseSelect.vue'
+import AlertBanner from '@/components/molecules/AlertBanner.vue'
+import ConfirmDialog from '@/components/molecules/ConfirmDialog.vue'
+import TypeToggle  from '@/components/molecules/TypeToggle.vue'
+import { useDirtyForm } from '@/composables/useDirtyForm.js'
 import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
+import { useToastStore }        from '@/stores/toast.store.js'
 import { parseAmountToCents, todayISO } from '@/utils/format.js'
 
 const props = defineProps({
@@ -12,41 +23,31 @@ const props = defineProps({
   transaction: { type: Object, default: null },
 })
 
-const emit = defineEmits(['saved', 'deleted', 'close'])
+const emit = defineEmits(['saved', 'deleted', 'cancel'])
 
 const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
+const toasts       = useToastStore()
 
 const isEdit = computed(() => !!props.transaction)
 
-const form = ref({
-  title: '',
-  amount: '',
-  date: todayISO(),
-  type: 'expense',
-  categoryId: '',
-})
+function initialForm() {
+  const t = props.transaction
+  return {
+    title:      t?.title ?? '',
+    amount:     t ? String(t.amount / 100).replace('.', ',') : '',
+    date:       t?.date ?? todayISO(),
+    type:       t?.type ?? 'expense',
+    categoryId: t?.category?.id ?? '',
+    note:       t?.note ?? '',
+  }
+}
 
+const form    = ref(initialForm())
 const errors  = ref({ title: '', amount: '', global: '' })
 const loading = ref(false)
 
-/** Recharge le formulaire quand on passe d'une transaction à l'autre. */
-watch(
-  () => props.transaction,
-  (transaction) => {
-    form.value = transaction
-      ? {
-          title: transaction.title,
-          amount: String(transaction.amount / 100).replace('.', ','),
-          date: transaction.date,
-          type: transaction.type,
-          categoryId: transaction.category?.id ?? '',
-        }
-      : { title: '', amount: '', date: todayISO(), type: 'expense', categoryId: '' }
-    errors.value = { title: '', amount: '', global: '' }
-  },
-  { immediate: true }
-)
+useDirtyForm(form)
 
 function validate() {
   errors.value = { title: '', amount: '', global: '' }
@@ -73,6 +74,7 @@ async function submit() {
     date: form.value.date,
     type: form.value.type,
     categoryId: form.value.categoryId || null,
+    note: form.value.note.trim() || null,
   }
 
   try {
@@ -80,8 +82,8 @@ async function submit() {
       ? await transactions.update(props.transaction.id, payload)
       : await transactions.create(payload)
 
+    toasts.success(isEdit.value ? 'Transaction modifiée.' : 'Transaction ajoutée.')
     emit('saved', saved)
-    emit('close')
   } catch (err) {
     errors.value.global = err.message
   } finally {
@@ -89,13 +91,16 @@ async function submit() {
   }
 }
 
+const confirmingDelete = ref(false)
+
 async function remove() {
   loading.value = true
   try {
     await transactions.remove(props.transaction.id)
+    toasts.success('Transaction supprimée.')
     emit('deleted', props.transaction.id)
-    emit('close')
   } catch (err) {
+    confirmingDelete.value = false
     errors.value.global = err.message
   } finally {
     loading.value = false
@@ -105,34 +110,13 @@ async function remove() {
 
 <template>
   <form class="transaction-form" novalidate @submit.prevent="submit">
-    <BaseText as="h2" size="lg" weight="semibold" color="primary">
-      {{ isEdit ? 'Modifier la transaction' : 'Nouvelle transaction' }}
+    <AlertBanner v-if="errors.global">{{ errors.global }}</AlertBanner>
+
+    <BaseText v-if="transaction?.recurringId" as="p" size="xs" color="muted">
+      Générée automatiquement par une charge fixe.
     </BaseText>
 
-    <div v-if="errors.global" class="transaction-form__error" role="alert">
-      <BaseText size="sm" color="danger">{{ errors.global }}</BaseText>
-    </div>
-
-    <div class="transaction-form__types" role="group" aria-label="Type de transaction">
-      <button
-        type="button"
-        class="type-toggle"
-        :class="{ 'type-toggle--active': form.type === 'expense' }"
-        :aria-pressed="form.type === 'expense'"
-        @click="form.type = 'expense'"
-      >
-        Dépense
-      </button>
-      <button
-        type="button"
-        class="type-toggle"
-        :class="{ 'type-toggle--active': form.type === 'income' }"
-        :aria-pressed="form.type === 'income'"
-        @click="form.type = 'income'"
-      >
-        Revenu
-      </button>
-    </div>
+    <TypeToggle v-model="form.type" aria-label="Type de transaction" />
 
     <BaseInput
       v-model="form.title"
@@ -161,15 +145,18 @@ async function remove() {
       required
     />
 
-    <div class="field">
-      <label class="field__label" for="transaction-category">Catégorie</label>
-      <select id="transaction-category" v-model="form.categoryId" class="field__select">
-        <option value="">Aucune</option>
-        <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
-          {{ category.label }}
-        </option>
-      </select>
-    </div>
+    <BaseSelect v-model="form.categoryId" id="transaction-category" label="Catégorie">
+      <option value="">Aucune</option>
+      <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
+        {{ category.label }}
+      </option>
+    </BaseSelect>
+
+    <BaseInput
+      v-model="form.note"
+      id="transaction-note"
+      label="Note (optionnelle)"
+    />
 
     <div class="transaction-form__actions">
       <BaseButton type="submit" variant="primary" :loading="loading" full>
@@ -182,16 +169,30 @@ async function remove() {
         variant="danger"
         :disabled="loading"
         full
-        @click="remove"
+        @click="confirmingDelete = true"
       >
         Supprimer
       </BaseButton>
 
-      <BaseButton type="button" variant="ghost" full @click="$emit('close')">
+      <BaseButton type="button" variant="ghost" full @click="emit('cancel')">
         Annuler
       </BaseButton>
     </div>
   </form>
+
+  <ConfirmDialog
+    v-if="confirmingDelete"
+    title="Supprimer cette transaction ?"
+    confirm-label="Supprimer"
+    danger
+    :loading="loading"
+    @cancel="confirmingDelete = false"
+    @confirm="remove"
+  >
+    <BaseText size="sm" color="secondary">
+      « {{ transaction.title }} » sera supprimée définitivement.
+    </BaseText>
+  </ConfirmDialog>
 </template>
 
 <style scoped>
@@ -199,66 +200,6 @@ async function remove() {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.transaction-form__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.transaction-form__types {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-}
-
-.type-toggle {
-  padding: var(--space-3);
-  min-height: 2.75rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--transition-fast), border-color var(--transition-fast),
-              background var(--transition-fast);
-}
-
-.type-toggle--active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-subtle);
-  color: var(--color-primary);
-}
-
-.field { display: flex; flex-direction: column; gap: var(--space-2); }
-
-.field__label {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--color-text-secondary);
-}
-
-.field__select {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  min-height: 2.75rem;
-  color: var(--color-text-primary);
-  font-size: var(--text-base);
-}
-
-.field__select:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px var(--color-primary-ring);
 }
 
 .transaction-form__actions {

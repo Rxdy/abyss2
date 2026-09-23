@@ -25,7 +25,7 @@ beforeEach(async () => {
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
-  token = app.jwt.sign({ userId: 'uuid-test-user', email: 'alice@example.com' })
+  token = app.jwt.sign({ userId: 'uuid-test-user', email: 'alice@example.com', tv: 0 })
 })
 
 afterEach(async () => {
@@ -38,7 +38,7 @@ const getUser = (headers: Record<string, string> = {}) =>
 describe('GET /api/user', () => {
   it('200 — renvoie le profil avec l\'email déchiffré', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user',
+      id: 'uuid-test-user', tokenVersion: 0,
       emailEncrypted: encryptEmail('alice@example.com'),
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     })
@@ -54,7 +54,7 @@ describe('GET /api/user', () => {
 
   it('cherche l\'utilisateur avec l\'id porté par le token', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user',
+      id: 'uuid-test-user', tokenVersion: 0,
       emailEncrypted: encryptEmail('alice@example.com'),
       createdAt: new Date(),
     })
@@ -101,7 +101,7 @@ describe('GET /api/user', () => {
     const res = await getUser({ authorization: `Bearer ${token}` })
 
     expect(res.statusCode).toBe(401)
-    expect(res.json().code).toBe('USER_NOT_FOUND')
+    expect(res.json().code).toBe('TOKEN_REVOKED')
   })
 })
 
@@ -111,7 +111,7 @@ describe('DELETE /api/user', () => {
 
   it('200 — supprime le compte quand le mot de passe est correct', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user',
+      id: 'uuid-test-user', tokenVersion: 0,
       passwordHash: await bcrypt.hash('correct-horse', 4),
     })
     mockPrisma.user.delete.mockResolvedValue({ id: 'uuid-test-user' })
@@ -125,7 +125,7 @@ describe('DELETE /api/user', () => {
 
   it('401 — mauvais mot de passe, ne supprime rien', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user',
+      id: 'uuid-test-user', tokenVersion: 0,
       passwordHash: await bcrypt.hash('correct-horse', 4),
     })
 
@@ -145,14 +145,14 @@ describe('DELETE /api/user', () => {
 })
 
 describe('Jetons versionnés (tv) — déconnexion multi-appareils', () => {
-  it('un jeton sans tv passe sans consulter la base (rétrocompatible)', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com'), createdAt: new Date(),
-    })
+  it('401 — un jeton sans tv est refusé, sans consulter la base', async () => {
+    const legacyToken = app.jwt.sign({ userId: 'uuid-test-user', email: 'alice@example.com' })
 
-    const res = await getUser({ authorization: `Bearer ${token}` }) // token sans tv (voir beforeEach)
+    const res = await getUser({ authorization: `Bearer ${legacyToken}` })
 
-    expect(res.statusCode).toBe(200)
+    expect(res.statusCode).toBe(401)
+    expect(res.json().code).toBe('TOKEN_REVOKED')
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
   })
 
   it('401 — jeton avec un tv qui ne correspond plus à celui en base', async () => {
@@ -181,27 +181,62 @@ describe('PUT /api/user/password', () => {
   const changePassword = (payload: any, headers: Record<string, string> = {}) =>
     app.inject({ method: 'PUT', url: '/api/user/password', payload, headers })
 
-  it('200 — change le mot de passe et renvoie un nouveau jeton', async () => {
+  const STRONG_PASSWORD = 'Tirelire_Abyss-99'
+
+  it('200 — change le mot de passe, ré-émet la session (cookie) et un jeton CSRF', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user',
+      id: 'uuid-test-user', tokenVersion: 0,
       emailEncrypted: encryptEmail('alice@example.com'),
       passwordHash: await bcrypt.hash('old-password', 4),
     })
     mockPrisma.user.update.mockResolvedValue({ tokenVersion: 1 })
 
     const res = await changePassword(
-      { currentPassword: 'old-password', newPassword: 'new-password-123' },
+      { currentPassword: 'old-password', newPassword: STRONG_PASSWORD },
       { authorization: `Bearer ${token}` },
     )
 
     expect(res.statusCode).toBe(200)
-    expect(res.json().token).toBeTypeOf('string')
+    expect(res.json().token).toBeUndefined() // plus jamais dans le corps de la réponse
+    expect(typeof res.json().csrfToken).toBe('string')
+    const cookie = res.cookies.find((c: any) => c.name === 'token')
+    expect(cookie?.value.split('.')).toHaveLength(3) // un JWT, tout neuf
     expect(mockPrisma.user.update.mock.calls[0][0].data.tokenVersion).toEqual({ increment: 1 })
+  })
+
+  it('400 — nouveau mot de passe sous le niveau requis', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'uuid-test-user', tokenVersion: 0, emailEncrypted: encryptEmail('alice@example.com'),
+      passwordHash: await bcrypt.hash('old-password', 4),
+    })
+
+    const res = await changePassword(
+      { currentPassword: 'old-password', newPassword: 'Bonjour42' },
+      { authorization: `Bearer ${token}` },
+    )
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('WEAK_PASSWORD')
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('un nouveau mot de passe identique à l\'ancien reste signalé SAME_PASSWORD, pas WEAK_PASSWORD (même s\'il est faible)', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'uuid-test-user', tokenVersion: 0, emailEncrypted: encryptEmail('alice@example.com'),
+      passwordHash: await bcrypt.hash('Bonjour42', 4),
+    })
+
+    const res = await changePassword(
+      { currentPassword: 'Bonjour42', newPassword: 'Bonjour42' },
+      { authorization: `Bearer ${token}` },
+    )
+
+    expect(res.json().code).toBe('SAME_PASSWORD')
   })
 
   it('401 — mot de passe actuel incorrect', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com'),
+      id: 'uuid-test-user', tokenVersion: 0, emailEncrypted: encryptEmail('alice@example.com'),
       passwordHash: await bcrypt.hash('old-password', 4),
     })
 
@@ -216,7 +251,7 @@ describe('PUT /api/user/password', () => {
 
   it('400 — nouveau mot de passe identique à l\'ancien', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com'),
+      id: 'uuid-test-user', tokenVersion: 0, emailEncrypted: encryptEmail('alice@example.com'),
       passwordHash: await bcrypt.hash('same-password', 4),
     })
 
@@ -235,46 +270,3 @@ describe('PUT /api/user/password', () => {
   })
 })
 
-describe('POST /api/user/revoke-sessions', () => {
-  const revoke = (headers: Record<string, string> = {}) =>
-    app.inject({ method: 'POST', url: '/api/user/revoke-sessions', headers })
-
-  it('200 — incrémente tokenVersion et renvoie un nouveau jeton', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com'),
-    })
-    mockPrisma.user.update.mockResolvedValue({ tokenVersion: 5 })
-
-    const res = await revoke({ authorization: `Bearer ${token}` })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json().token).toBeTypeOf('string')
-    expect(mockPrisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'uuid-test-user' },
-      data:  { tokenVersion: { increment: 1 } },
-      select: { tokenVersion: true },
-    })
-  })
-
-  it('le nouveau jeton reste valide pour l\'appareil courant', async () => {
-    mockPrisma.user.findUnique
-      .mockResolvedValueOnce({ id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com') })
-      .mockResolvedValueOnce({ tokenVersion: 3 }) // relecture par `authenticate` sur le 2e appel
-      // 3e appel : GET /api/user lit le profil complet une fois le jeton validé.
-      .mockResolvedValue({ id: 'uuid-test-user', emailEncrypted: encryptEmail('alice@example.com'), createdAt: new Date() })
-
-    mockPrisma.user.update.mockResolvedValue({ tokenVersion: 3 })
-
-    const res = await revoke({ authorization: `Bearer ${token}` })
-    const { token: newToken } = res.json()
-
-    const check = await getUser({ authorization: `Bearer ${newToken}` })
-    expect(check.statusCode).not.toBe(401)
-  })
-
-  it('401 — sans token', async () => {
-    const res = await revoke()
-    expect(res.statusCode).toBe(401)
-    expect(mockPrisma.user.update).not.toHaveBeenCalled()
-  })
-})

@@ -53,7 +53,11 @@ export function parseAmountToCents(input) {
   return Math.round(value * 100)
 }
 
-/** Date du jour au format attendu par l'API et les <input type="date">. */
-export function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+/**
+ * Date du jour (fuseau de l'appareil) au format attendu par l'API et les
+ * <input type="date">. Pas de toISOString() : il donne la date UTC, donc la
+ * veille entre minuit et 1 h/2 h en France.
+ */
+export function todayISO(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA').format(now) // en-CA → yyyy-mm-dd
 }
