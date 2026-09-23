@@ -75,8 +75,8 @@ describe('GET /api/categories', () => {
 
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual([
-      { id: CAT_ID,     name: 'Alimentation', color: '#4ade80', position: 0, budget: null, parentId: null, transactionCount: 0, childrenCount: 0 },
-      { id: 'other-id', name: 'Transport',    color: '#4f8ef7', position: 1, budget: null, parentId: null, transactionCount: 0, childrenCount: 0 },
+      { id: CAT_ID,     name: 'Alimentation', color: '#4ade80', position: 0, budget: null, parentId: null, envelopeId: null, transactionCount: 0, childrenCount: 0 },
+      { id: 'other-id', name: 'Transport',    color: '#4f8ef7', position: 1, budget: null, parentId: null, envelopeId: null, transactionCount: 0, childrenCount: 0 },
     ])
   })
 

@@ -33,6 +33,7 @@ const categorySchema = {
     position:         { type: 'integer', nullable: true },
     budget:           { type: 'integer', nullable: true, description: 'Plafond mensuel en centimes, null : pas de budget' },
     parentId:         { type: 'string', format: 'uuid', nullable: true },
+    envelopeId:       { type: 'string', format: 'uuid', nullable: true },
     transactionCount: { type: 'integer' },
     childrenCount:    { type: 'integer' },
   },
@@ -54,6 +55,7 @@ function toApi(category: Category & { _count?: { transactions: number; children:
     position:         category.position,
     budget:           category.budgetEncrypted ? parseInt(decryptValue(category.budgetEncrypted, BUDGET_USAGE), 10) : null,
     parentId:         category.parentId ?? null,
+    envelopeId:       category.envelopeId ?? null,
     transactionCount: category._count?.transactions ?? 0,
     childrenCount:    category._count?.children ?? 0,
   }

@@ -43,6 +43,12 @@ const routes = [
     meta: { layout: 'default', title: 'Transactions', requiresAuth: true }
   },
   {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/pages/NotificationsPage.vue'),
+    meta: { layout: 'default', title: 'Notifications', requiresAuth: true }
+  },
+  {
     path: '/stats',
     name: 'stats',
     component: () => import('@/pages/StatsPage.vue'),
@@ -59,6 +65,12 @@ const routes = [
     name: 'categories',
     component: () => import('@/pages/CategoriesPage.vue'),
     meta: { layout: 'default', title: 'Catégories', requiresAuth: true }
+  },
+  {
+    path: '/profile/envelopes',
+    name: 'envelopes',
+    component: () => import('@/pages/EnvelopesPage.vue'),
+    meta: { layout: 'default', title: 'Enveloppes', requiresAuth: true }
   },
   {
     path: '/recurring',
