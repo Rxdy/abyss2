@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import AuthLayout    from '@/layouts/AuthLayout.vue'
 import ToastHost     from '@/components/organisms/ToastHost.vue'
+import CoinDropOverlay from '@/components/organisms/CoinDropOverlay.vue'
 import { useAuthStore } from '@/stores/auth.store.js'
 import { useAppStore }  from '@/stores/app.store.js'
 
@@ -45,6 +46,7 @@ onMounted(async () => {
 <template>
   <component :is="layout" />
   <ToastHost />
+  <CoinDropOverlay />
 </template>
 
 <style>

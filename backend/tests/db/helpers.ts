@@ -36,6 +36,26 @@ export function createCategory(userId: string, data: { parentId?: string; color?
   })
 }
 
+export function createEnvelope(userId: string) {
+  return prisma.envelope.create({
+    data: {
+      userId,
+      nameEncrypted:   'iv:tag:name',
+      budgetEncrypted: 'iv:tag:budget',
+    },
+  })
+}
+
+export function createNotification(userId: string, data: { type?: string; envelopeId?: string } = {}) {
+  return prisma.notification.create({
+    data: {
+      userId,
+      type: data.type ?? 'envelope_overspend',
+      envelopeId: data.envelopeId ?? null,
+    },
+  })
+}
+
 export function createTransaction(userId: string, data: { categoryId?: string; recurringId?: string; type?: string } = {}) {
   return prisma.transaction.create({
     data: {

@@ -202,6 +202,8 @@ export async function buildApp(opts: { testing?: boolean; prisma?: PrismaClient 
   fastify.register(import('./routes/auth.js'))
   fastify.register(import('./routes/user.js'))
   fastify.register(import('./routes/categories.js'))
+  fastify.register(import('./routes/envelopes.js'))
+  fastify.register(import('./routes/notifications.js'))
   fastify.register(import('./routes/transactions.js'))
   fastify.register(import('./routes/recurring.js'))
   fastify.register(import('./routes/stats.js'))

@@ -46,7 +46,9 @@ let token: string
 beforeEach(async () => {
   mockPrisma = {
     user:     { findUnique: vi.fn().mockResolvedValue({ tokenVersion: 0 }) },
-    category: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    category: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    envelope: { findUnique: vi.fn() },
+    notification: { create: vi.fn() },
     transaction: {
       findMany:  vi.fn().mockResolvedValue([]),
       findFirst: vi.fn(),

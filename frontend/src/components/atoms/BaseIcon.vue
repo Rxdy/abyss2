@@ -27,6 +27,8 @@ const PATHS = {
   moon:   'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z',
   download: 'M12 3v12M7.5 10.5 12 15l4.5-4.5M4 20h16',
   close:  'M6 6l12 12M18 6 6 18',
+  bell:   'M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
+  archive: 'M3 7h18M5 7v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M10 12h4M4 4h16a1 1 0 0 1 1 1v2H3V5a1 1 0 0 1 1-1Z',
 }
 
 const props = defineProps({

@@ -18,6 +18,7 @@ import type { TransactionType } from '../types.js'
 import { currentMonthKey } from '../utils/date.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { runDueRecurring } from '../utils/recurring.js'
+import { checkEnvelopeOverspend } from '../utils/notifications.js'
 
 const TITLE_USAGE  = 'transaction-title'
 const AMOUNT_USAGE = 'transaction-amount'
@@ -311,6 +312,10 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
       },
       include: { category: true },
     })
+
+    if (type === 'expense') {
+      await checkEnvelopeOverspend(fastify.prisma, req.user.userId, categoryId, amount)
+    }
 
     return reply.code(201).send(toApi(transaction))
   })

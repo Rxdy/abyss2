@@ -14,14 +14,17 @@ import FormModal        from '@/components/organisms/FormModal.vue'
 import TransactionForm  from '@/components/organisms/TransactionForm.vue'
 import TransactionList  from '@/components/organisms/TransactionList.vue'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
+import { useEnvelopesStore }    from '@/stores/envelopes.store.js'
 import { useRecurringStore }    from '@/stores/recurring.store.js'
 import { useStatsStore }        from '@/stores/stats.store.js'
 import { useTransactionsStore } from '@/stores/transactions.store.js'
-import { buildBudgets } from '@/utils/budget.js'
-import { monthRange }   from '@/utils/period.js'
+import { buildBudgets, buildEnvelopes } from '@/utils/budget.js'
+import { formatAmount }  from '@/utils/format.js'
+import { monthRange }    from '@/utils/period.js'
 
 const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
+const envelopes    = useEnvelopesStore()
 const recurring    = useRecurringStore()
 const stats        = useStatsStore()
 
@@ -65,8 +68,15 @@ function onSaved() {
 
 watch(selectedMonth, refresh)
 
-// ── Budgets, courbe du mois, prochaines échéances ──────────────────────────
-const budgets = computed(() => buildBudgets(categories.items, stats.data.categories))
+// ── Budgets, enveloppes, courbe du mois, prochaines échéances ──────────────
+const budgets       = computed(() => buildBudgets(categories.items, stats.data.categories))
+const envelopeList  = computed(() => buildEnvelopes(envelopes.items, stats.data.categories))
+
+/** Ce qu'on a alloué aux enveloppes ce mois-ci dépasse-t-il ce qu'on a réellement encaissé ? */
+const allocatedTotal = computed(() => envelopeList.value.reduce((total, e) => total + e.budget, 0))
+const overAllocated  = computed(() =>
+  envelopeList.value.length > 0 && allocatedTotal.value > transactions.summary.monthIncome,
+)
 
 /** Compte vide : on invite à commencer ; sinon, le mois affiché n'a simplement rien. */
 const emptyLabel = computed(() =>
@@ -88,6 +98,7 @@ const upcoming = computed(() =>
 onMounted(() => {
   refresh()
   categories.fetchAll().catch(() => {})
+  envelopes.fetchAll().catch(() => {})
   recurring.fetchAll().catch(() => {})
 })
 </script>
@@ -123,6 +134,17 @@ onMounted(() => {
     <section v-if="budgets.length" class="home__section" aria-labelledby="home-budgets">
       <BaseText id="home-budgets" as="h2" size="lg" weight="semibold" color="primary">Budgets</BaseText>
       <div class="home__card"><BudgetList :budgets="budgets" /></div>
+    </section>
+
+    <!-- Enveloppes : seulement si au moins une a été créée -->
+    <section v-if="envelopeList.length" class="home__section" aria-labelledby="home-envelopes">
+      <BaseText id="home-envelopes" as="h2" size="lg" weight="semibold" color="primary">Enveloppes</BaseText>
+      <AlertBanner v-if="overAllocated">
+        Vous allouez {{ formatAmount(allocatedTotal) }} à vos enveloppes ce mois-ci, pour
+        {{ formatAmount(transactions.summary.monthIncome) }} de revenus encaissés — libre à vous de
+        continuer, mais l'enveloppe n'est alors plus financée par une vraie rentrée d'argent.
+      </AlertBanner>
+      <div class="home__card"><BudgetList :budgets="envelopeList" /></div>
     </section>
 
     <!-- Courbe des dépenses du mois -->

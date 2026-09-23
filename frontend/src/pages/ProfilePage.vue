@@ -9,6 +9,7 @@ import BaseIcon      from '@/components/atoms/BaseIcon.vue'
 import AlertBanner from '@/components/molecules/AlertBanner.vue'
 import DangerZone   from '@/components/organisms/DangerZone.vue'
 import FormModal    from '@/components/organisms/FormModal.vue'
+import ResetDataButton from '@/components/organisms/ResetDataButton.vue'
 import PasswordChangeForm from '@/components/organisms/PasswordChangeForm.vue'
 import { todayISO } from '@/utils/format.js'
 
@@ -118,6 +119,15 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
+
+      <RouterLink to="/profile/envelopes" class="profile__setting">
+        <BaseIcon name="mail" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Enveloppes</BaseText>
+          <BaseText size="xs" color="muted">Plafonds mensuels par groupe de catégories</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
     </nav>
 
     <!-- Mes données : export -->
@@ -138,6 +148,8 @@ onMounted(loadProfile)
         <BaseIcon name="download" :size="18" />
         {{ option.label }}
       </BaseButton>
+
+      <ResetDataButton />
     </section>
 
     <BaseButton variant="secondary" full @click="passwordOpen = true">

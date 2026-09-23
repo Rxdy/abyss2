@@ -29,7 +29,9 @@ async function indexedColumns() {
 
 const EXPECTED: Record<string, string[]> = {
   users:                  ['id', 'email_hash'],
-  categories:             ['id', 'user_id', 'parent_id'],
+  categories:             ['id', 'user_id', 'parent_id', 'envelope_id'],
+  envelopes:              ['id', 'user_id'],
+  notifications:          ['id', 'user_id', 'user_id,read'],
   transactions:           ['id', 'user_id', 'user_id,date', 'category_id', 'recurring_id', 'recurring_id,date'],
   recurring_transactions: ['id', 'user_id'],
 }

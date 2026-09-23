@@ -26,9 +26,11 @@ model User {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   categories     Category[]
+  envelopes      Envelope[]
   transactions   Transaction[]
   recurring      RecurringTransaction[]
   resetTokens    PasswordResetToken[]
+  notifications  Notification[]
 
   @@map("users")
   @@schema("dbo")
@@ -77,15 +79,46 @@ model Category {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
+  envelopeId    String?  @map("envelope_id") @db.Uuid
+
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent        Category?     @relation("CategorySubcategories", fields: [parentId], references: [id], onDelete: SetNull)
   children      Category[]    @relation("CategorySubcategories")
+  envelope      Envelope?     @relation(fields: [envelopeId], references: [id], onDelete: SetNull)
   transactions  Transaction[]
   recurring     RecurringTransaction[]
 
   @@index([userId])
   @@index([parentId])
+  @@index([envelopeId])
   @@map("categories")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: Envelope — enveloppe budgétaire mensuelle, alimentée par les
+// revenus du mois, regroupant plusieurs catégories de dépense.
+//
+// Le montant alloué est un plafond informatif, jamais bloquant : dépasser
+// une enveloppe ou allouer plus que les revenus du mois du côté du client
+// n'empêche aucune transaction (voir todo.md). Si l'enveloppe est
+// supprimée, ses catégories sont conservées et simplement détachées
+// (envelope_id → NULL), comme une catégorie parente supprimée.
+// ============================================================
+model Envelope {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  nameEncrypted   String   @map("name_encrypted") @db.Text
+  budgetEncrypted String   @map("budget_encrypted") @db.Text  // montant alloué par mois, en centimes, chiffré
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories      Category[]
+  notifications   Notification[]
+
+  @@index([userId])
+  @@map("envelopes")
   @@schema("dbo")
 }
 
@@ -150,5 +183,32 @@ model RecurringTransaction {
 
   @@index([userId])
   @@map("recurring_transactions")
+  @@schema("dbo")
+}
+
+// ============================================================
+// Model: Notification — enveloppe dépassée, dépenses non catégorisées…
+//
+// Pas de titre/message stocké : construits à la lecture à partir de `type`
+// (+ `envelopeId`/`count`), comme les libellés d'erreur de l'API — rien de
+// texte libre à chiffrer ici. Si l'enveloppe est supprimée, la notification
+// est conservée (envelope_id → NULL) mais devient générique.
+// ============================================================
+model Notification {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  type       String    @db.VarChar(30)  // 'envelope_overspend' | 'uncategorized_digest'
+  envelopeId String?   @map("envelope_id") @db.Uuid
+  count      Int?                        // nombre de transactions concernées (digest)
+  read       Boolean   @default(false)
+  archived   Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  envelope   Envelope? @relation(fields: [envelopeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@map("notifications")
   @@schema("dbo")
 }

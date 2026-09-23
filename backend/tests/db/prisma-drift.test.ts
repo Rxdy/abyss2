@@ -29,9 +29,10 @@ function expectedPgType(field: PrismaField) {
 }
 
 describe('schema.prisma ↔ base', () => {
-  it('couvre les cinq modèles', () => {
+  it('couvre les sept modèles', () => {
     expect(models.map((m) => m.table).sort()).toEqual([
-      'categories', 'password_reset_tokens', 'recurring_transactions', 'transactions', 'users',
+      'categories', 'envelopes', 'notifications', 'password_reset_tokens',
+      'recurring_transactions', 'transactions', 'users',
     ])
   })
 
