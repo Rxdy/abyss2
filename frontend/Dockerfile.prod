@@ -1,0 +1,29 @@
+# Image de production : contrairement à Dockerfile (développement, `vite` en mode dev + HMR),
+# celle-ci construit le bundle statique et le sert avec nginx. L'installation de la PWA exige
+# HTTPS hors localhost — géré par le reverse proxy devant ce conteneur (voir docker-compose.prod.yml),
+# pas ici.
+
+# ---- build ----
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Même origine que l'API derrière le reverse proxy (Traefik) : les appels de useApi() partent
+# en relatif (`/api/...`), donc sur le domaine de la page — condition nécessaire au cookie de
+# session httpOnly (SameSite=Lax, pas de partage cross-site). Voir docker-compose.prod.yml.
+ARG VITE_API_URL=""
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN npm run build
+
+# ---- serve ----
+FROM nginx:1.27-alpine AS production
+
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

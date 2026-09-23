@@ -1,0 +1,14 @@
+{
+  "name": "abyss2-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Tests de bout en bout (navigateur réel) contre la pile lancée par `make up`",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

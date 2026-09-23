@@ -8,14 +8,29 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "${DB_PORT}:5432"
+      # Jamais exposée au réseau : la base n'est joignable que depuis cette machine.
+      - "127.0.0.1:${DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - abyss2_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mailpit — capture les emails de dev (récupération de mot de passe) sans vrai relais SMTP.
+  # Interface web sur http://localhost:8025 ; l'API leur parle en clair sur le port 1025.
+  mailpit:
+    container_name: abyss2_mailpit
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - abyss2_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8025/"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,27 +44,52 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?schema=dbo
-      FRONTEND_URL: http://localhost:5174
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5174}
       JWT_SECRET: ${JWT_SECRET}
       MASTER_SECRET: ${MASTER_SECRET}
       API_PORT: 3000
+      # Mailpit en développement (pas d'authentification) ; un vrai relais SMTP en production
+      # (voir .env.example) — seules ces variables changent, le code ne sait pas lequel il utilise.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-Abyss2 <no-reply@abyss2.local>}
       # Watchers en polling : les instances inotify de l'hôte sont une ressource
       # partagée et vite saturée quand plusieurs projets tournent (EMFILE).
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "600"
     ports:
-      - "3002:3000"
+      # Par défaut, joignable depuis cette machine seulement. `make up-lan` ouvre au réseau local
+      # (test de la PWA depuis un téléphone).
+      - "${LAN_ADDRESS:-127.0.0.1}:3002:3000"
     depends_on:
       postgres:
         condition: service_healthy
+      # Pas de `condition: service_healthy` sur Mailpit : l'API ne lui parle qu'à la demande (une
+      # requête de réinitialisation de mot de passe), jamais au démarrage — et en production, ce
+      # service n'existe même pas (voir docker-compose.prod.yml, un vrai relais SMTP le remplace).
+      mailpit:
+        condition: service_started
+        required: false
     volumes:
       - ./backend/src:/app/src
+      - ./backend/scripts:/app/scripts
       - ./backend/prisma:/app/prisma
       - ./backend/tests:/app/tests
       - ./backend/vitest.config.ts:/app/vitest.config.ts
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - ./backend/eslint.config.js:/app/eslint.config.js
       - ./backend/vitest.db.config.ts:/app/vitest.db.config.ts
     networks:
       - abyss2_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # Vue.js Frontend
   frontend:
@@ -58,21 +98,30 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      VITE_API_URL: http://localhost:3002
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3002}
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "600"
     ports:
-      - "5174:5173"
+      - "${LAN_ADDRESS:-127.0.0.1}:5174:5173"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
       - ./frontend/tests:/app/tests
       - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.js:/app/vite.config.js
+      - ./frontend/eslint.config.js:/app/eslint.config.js
+      - ./frontend/scripts:/app/scripts
     networks:
       - abyss2_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   postgres_data:

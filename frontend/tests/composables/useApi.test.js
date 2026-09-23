@@ -33,8 +33,16 @@ describe('useApi', () => {
     expect(options.method).toBe('GET')
   })
 
+  it('envoie toujours les cookies (credentials: include), même sans session connue', async () => {
+    const fetchMock = mockFetch({ status: 'ok' })
+
+    await useApi().get('/health')
+
+    expect(fetchMock.mock.calls[0][1].credentials).toBe('include')
+  })
+
   it('POST — sérialise le corps et pose le Content-Type', async () => {
-    const fetchMock = mockFetch({ token: 'jwt' })
+    const fetchMock = mockFetch({ csrfToken: 'nouveau' })
     const api = useApi()
 
     await api.post('/api/auth/login', { email: 'a@b.c', password: 'x' })
@@ -45,21 +53,30 @@ describe('useApi', () => {
     expect(JSON.parse(options.body)).toEqual({ email: 'a@b.c', password: 'x' })
   })
 
-  it('ajoute le header Authorization quand un token est présent', async () => {
-    useAuthStore().setSession({ token: 'jwt-token', user: null })
+  it('ajoute le header X-CSRF-Token sur une requête qui modifie des données, quand un jeton est connu', async () => {
+    useAuthStore().setSession({ csrfToken: 'csrf-abc' })
+    const fetchMock = mockFetch({ ok: true })
+
+    await useApi().post('/api/categories', { name: 'Loisirs' })
+
+    expect(fetchMock.mock.calls[0][1].headers['X-CSRF-Token']).toBe('csrf-abc')
+  })
+
+  it('n\'ajoute pas X-CSRF-Token sans jeton connu', async () => {
+    const fetchMock = mockFetch({ ok: true })
+
+    await useApi().post('/api/categories', { name: 'Loisirs' })
+
+    expect(fetchMock.mock.calls[0][1].headers['X-CSRF-Token']).toBeUndefined()
+  })
+
+  it('n\'ajoute pas X-CSRF-Token sur une lecture (GET), même avec un jeton connu', async () => {
+    useAuthStore().setSession({ csrfToken: 'csrf-abc' })
     const fetchMock = mockFetch({ ok: true })
 
     await useApi().get('/api/user')
 
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer jwt-token')
-  })
-
-  it('n\'ajoute pas Authorization sans token', async () => {
-    const fetchMock = mockFetch({ ok: true })
-
-    await useApi().get('/health')
-
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined()
+    expect(fetchMock.mock.calls[0][1].headers['X-CSRF-Token']).toBeUndefined()
   })
 
   it('rejette avec le message d\'erreur de l\'API', async () => {
@@ -100,5 +117,48 @@ describe('useApi', () => {
 
     expect(fetchMock.mock.calls[0][1].method).toBe('PUT')
     expect(fetchMock.mock.calls[1][1].method).toBe('DELETE')
+  })
+})
+
+describe('useApi — download', () => {
+  function mockFile({ ok = true, status = 200, body = null } = {}) {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok, status,
+      blob: async () => new Blob(['a,b']),
+      json: async () => body,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    URL.createObjectURL = vi.fn(() => 'blob:fake')
+    URL.revokeObjectURL = vi.fn()
+    return fetchMock
+  }
+
+  it('envoie les cookies (credentials: include), puis déclenche l\'enregistrement sous le nom voulu', async () => {
+    const fetchMock = mockFile()
+    const clicked = []
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      clicked.push({ href: this.href, download: this.download })
+    })
+
+    await useApi().download('/api/user/export?format=csv', 'export.csv')
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/user\/export\?format=csv$/)
+    expect(options.credentials).toBe('include')
+    expect(clicked).toEqual([{ href: 'blob:fake', download: 'export.csv' }])
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')
+    click.mockRestore()
+  })
+
+  it('propage le message d\'erreur de l\'API sans rien enregistrer', async () => {
+    mockFile({ ok: false, status: 401, body: { error: 'Session expirée — reconnectez-vous.' } })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const api = useApi()
+
+    await expect(api.download('/api/user/export', 'x.json')).rejects.toThrow('Session expirée')
+
+    expect(api.error.value).toBe('Session expirée — reconnectez-vous.')
+    expect(click).not.toHaveBeenCalled()
+    click.mockRestore()
   })
 })

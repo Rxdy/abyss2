@@ -3,11 +3,12 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import BaseText   from '@/components/atoms/BaseText.vue'
 import BaseButton from '@/components/atoms/BaseButton.vue'
 
-const props = defineProps({
+defineProps({
   title:         { type: String, required: true },
   confirmLabel:  { type: String, default: 'Confirmer' },
   cancelLabel:   { type: String, default: 'Annuler' },
   danger:        { type: Boolean, default: false },
+  hideCancel:    { type: Boolean, default: false },
   loading:       { type: Boolean, default: false },
 })
 
@@ -32,7 +33,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         </div>
 
         <div class="dialog__actions">
-          <BaseButton type="button" variant="ghost" :disabled="loading" @click="emit('cancel')">
+          <BaseButton v-if="!hideCancel" type="button" variant="ghost" :disabled="loading" @click="emit('cancel')">
             {{ cancelLabel }}
           </BaseButton>
           <BaseButton

@@ -3,15 +3,17 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import AppHeader from '@/components/organisms/AppHeader.vue'
 import { useAuthStore } from '@/stores/auth.store.js'
+import { listenForInstall, resetPwaInstall } from '@/composables/usePwaInstall.js'
 import { router } from '../../setup.js'
 
 beforeEach(async () => {
   await router.push('/')
   await router.isReady()
-  useAuthStore().setSession({ token: 'jwt', user: { id: '1', email: 'alice@example.com' } })
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+  useAuthStore().setSession({ csrfToken: 'csrf-abc', user: { id: '1', email: 'alice@example.com' } })
 })
 
 describe('AppHeader — contenu', () => {
@@ -29,11 +31,30 @@ describe('AppHeader — contenu', () => {
 
     const nav = w.find('nav[aria-label="Navigation principale"]')
     expect(nav.exists()).toBe(true)
-    expect(nav.findAll('a')).toHaveLength(4)
+    expect(nav.findAll('a')).toHaveLength(5)
   })
 
   it('propose la bascule de thème', () => {
     expect(mount(AppHeader).find('.theme-toggle').exists()).toBe(true)
+  })
+
+  it('n\'affiche pas le bouton d\'installation quand la PWA n\'est pas installable', () => {
+    resetPwaInstall()
+    expect(mount(AppHeader).find('.pwa-install').exists()).toBe(false)
+  })
+
+  it('affiche le bouton d\'installation dès que le navigateur le permet', async () => {
+    resetPwaInstall()
+    listenForInstall()
+    const w = mount(AppHeader)
+
+    const event = new Event('beforeinstallprompt', { cancelable: true })
+    event.prompt = vi.fn()
+    event.userChoice = Promise.resolve({ outcome: 'dismissed' })
+    window.dispatchEvent(event)
+    await w.vm.$nextTick()
+
+    expect(w.find('.pwa-install').exists()).toBe(true)
   })
 })
 
@@ -50,9 +71,10 @@ describe('AppHeader — déconnexion', () => {
     const w = mount(AppHeader)
 
     await w.find('.app-header__logout').trigger('click')
+    await flushPromises()
 
     expect(auth.isAuthenticated).toBe(false)
-    expect(sessionStorage.getItem('abyss2_token')).toBeNull()
+    expect(localStorage.getItem('abyss2_has_session')).toBeNull()
   })
 
   it('renvoie vers la page de connexion', async () => {
@@ -60,6 +82,7 @@ describe('AppHeader — déconnexion', () => {
     const w = mount(AppHeader)
 
     await w.find('.app-header__logout').trigger('click')
+    await flushPromises()
 
     expect(push).toHaveBeenCalledWith({ name: 'login' })
   })

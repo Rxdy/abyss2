@@ -1,7 +1,7 @@
 /**
  * Tests d'intégration — base de données réelle
  *
- * Vérifie que le schéma physique (postgres/init.sql) correspond à ce que
+ * Vérifie que le schéma physique (construit par `prisma/migrations`) correspond à ce que
  * Prisma et l'API attendent. Nécessite un PostgreSQL joignable via DATABASE_URL.
  *
  *   docker compose up -d postgres
@@ -25,9 +25,6 @@ function userFixture(suffix: string) {
     emailHash:      fakeHash(suffix),
     emailEncrypted: 'iv:tag:ciphertext',
     passwordHash:   '$2a$12$notarealhashnotarealhashnotarealhashnotarealhashno',
-    authSalt:       'a'.repeat(32),
-    keySalt:        'b'.repeat(32),
-    keyFragment:    'c'.repeat(64),
   }
 }
 
@@ -75,8 +72,8 @@ describe('table dbo.users', () => {
     const columns = Object.fromEntries(rows.map((r) => [r.column_name, r]))
 
     expect(Object.keys(columns).sort()).toEqual([
-      'auth_salt', 'created_at', 'email_encrypted', 'email_hash',
-      'id', 'key_fragment', 'key_salt', 'password_hash', 'token_version', 'updated_at',
+      'created_at', 'email_encrypted', 'email_hash',
+      'id', 'password_hash', 'token_version', 'updated_at',
     ])
 
     expect(columns.id.data_type).toBe('uuid')
@@ -88,7 +85,7 @@ describe('table dbo.users', () => {
     expect(columns.created_at.data_type).toBe('timestamp with time zone')
 
     // Aucune colonne obligatoire ne doit être nullable
-    for (const name of ['email_hash', 'email_encrypted', 'password_hash', 'auth_salt', 'key_salt', 'key_fragment']) {
+    for (const name of ['email_hash', 'email_encrypted', 'password_hash']) {
       expect(columns[name].is_nullable).toBe('NO')
     }
   })

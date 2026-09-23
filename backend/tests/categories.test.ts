@@ -33,7 +33,7 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user:     { findUnique: vi.fn(), create: vi.fn() },
+    user:     { findUnique: vi.fn().mockResolvedValue({ tokenVersion: 0 }), create: vi.fn() },
     category: {
       findMany:   vi.fn().mockResolvedValue([]),
       findFirst:  vi.fn(),
@@ -50,7 +50,7 @@ beforeEach(async () => {
   }
   app = await buildApp({ testing: true, prisma: mockPrisma })
   await app.ready()
-  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com' })
+  token = app.jwt.sign({ userId: USER_ID, email: 'alice@example.com', tv: 0 })
 })
 
 afterEach(async () => {
@@ -75,8 +75,8 @@ describe('GET /api/categories', () => {
 
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual([
-      { id: CAT_ID,     name: 'Alimentation', color: '#4ade80', position: 0, parentId: null, transactionCount: 0, childrenCount: 0 },
-      { id: 'other-id', name: 'Transport',    color: '#4f8ef7', position: 1, parentId: null, transactionCount: 0, childrenCount: 0 },
+      { id: CAT_ID,     name: 'Alimentation', color: '#4ade80', position: 0, budget: null, parentId: null, transactionCount: 0, childrenCount: 0 },
+      { id: 'other-id', name: 'Transport',    color: '#4f8ef7', position: 1, budget: null, parentId: null, transactionCount: 0, childrenCount: 0 },
     ])
   })
 
@@ -312,5 +312,94 @@ describe('DELETE /api/categories/:id', () => {
     expect(res.statusCode).toBe(400)
     expect(res.json().code).toBe('CATEGORY_SELF_REASSIGN')
     expect(mockPrisma.category.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('budget mensuel', () => {
+  const { BUDGET_USAGE } = { BUDGET_USAGE: 'category-budget' }
+  const create = (payload: any) =>
+    app.inject({ method: 'POST', url: '/api/categories', headers: auth(), payload })
+  const update = (payload: any) =>
+    app.inject({ method: 'PUT', url: `/api/categories/${CAT_ID}`, headers: auth(), payload })
+
+  beforeEach(() => {
+    mockPrisma.category.create.mockImplementation(async ({ data }: any) => ({ id: CAT_ID, ...data }))
+    mockPrisma.category.findFirst.mockResolvedValue({ id: CAT_ID })
+    mockPrisma.category.update.mockImplementation(async ({ data }: any) => categoryRow('Courses', data))
+  })
+
+  describe('lecture', () => {
+    it('expose le budget déchiffré, en centimes', async () => {
+      mockPrisma.category.findMany.mockResolvedValue([
+        categoryRow('Courses', { budgetEncrypted: encryptValue('40000', BUDGET_USAGE) }),
+        categoryRow('Loisirs', { id: 'autre', budgetEncrypted: null }),
+      ])
+
+      const res = await app.inject({ method: 'GET', url: '/api/categories', headers: auth() })
+
+      expect(res.json().map((c: any) => c.budget)).toEqual([40000, null])
+    })
+  })
+
+  describe('création', () => {
+    it('chiffre le budget : le montant n\'apparaît pas en clair en base', async () => {
+      const res = await create({ name: 'Courses', budget: 40000 })
+
+      expect(res.statusCode).toBe(201)
+      expect(res.json().budget).toBe(40000)
+      const { data } = mockPrisma.category.create.mock.calls[0][0]
+      expect(data.budgetEncrypted).not.toContain('40000')
+      expect(decryptValue(data.budgetEncrypted, BUDGET_USAGE)).toBe('40000')
+    })
+
+    it('sans budget : rien n\'est stocké, l\'API renvoie null', async () => {
+      const res = await create({ name: 'Courses' })
+
+      expect(mockPrisma.category.create.mock.calls[0][0].data.budgetEncrypted).toBeNull()
+      expect(res.json().budget).toBeNull()
+    })
+
+    it('n\'utilise pas la clé des montants de transactions (usages séparés)', async () => {
+      await create({ name: 'Courses', budget: 40000 })
+
+      const { budgetEncrypted } = mockPrisma.category.create.mock.calls[0][0].data
+      expect(() => decryptValue(budgetEncrypted, 'transaction-amount')).toThrow()
+    })
+
+    it.each([0, -5, 12.5, 100_000_001, 'beaucoup'])('400 — budget invalide (%s)', async (budget) => {
+      const res = await create({ name: 'Courses', budget })
+
+      expect(res.statusCode).toBe(400)
+      expect(mockPrisma.category.create).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('modification', () => {
+    it('définit ou change le budget', async () => {
+      const res = await update({ budget: 25000 })
+
+      expect(res.statusCode).toBe(200)
+      expect(res.json().budget).toBe(25000)
+      expect(decryptValue(mockPrisma.category.update.mock.calls[0][0].data.budgetEncrypted, BUDGET_USAGE)).toBe('25000')
+    })
+
+    it('null retire le budget', async () => {
+      const res = await update({ budget: null })
+
+      expect(res.statusCode).toBe(200)
+      expect(mockPrisma.category.update.mock.calls[0][0].data.budgetEncrypted).toBeNull()
+      expect(res.json().budget).toBeNull()
+    })
+
+    it('un champ absent laisse le budget tel quel', async () => {
+      await update({ name: 'Nouveau nom' })
+
+      expect('budgetEncrypted' in mockPrisma.category.update.mock.calls[0][0].data).toBe(false)
+    })
+
+    it('400 — budget invalide', async () => {
+      expect((await update({ budget: 0 })).statusCode).toBe(400)
+      expect(mockPrisma.category.update).not.toHaveBeenCalled()
+    })
   })
 })

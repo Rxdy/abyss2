@@ -1,12 +1,18 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BaseText   from '@/components/atoms/BaseText.vue'
 import BaseButton from '@/components/atoms/BaseButton.vue'
 import BaseIcon   from '@/components/atoms/BaseIcon.vue'
+import BaseInput  from '@/components/atoms/BaseInput.vue'
+import FabButton  from '@/components/atoms/FabButton.vue'
 import TransactionList    from '@/components/organisms/TransactionList.vue'
+import FormModal          from '@/components/organisms/FormModal.vue'
 import TransactionForm    from '@/components/organisms/TransactionForm.vue'
-import TransactionDetail  from '@/components/organisms/TransactionDetail.vue'
 import DateRangePicker    from '@/components/molecules/DateRangePicker.vue'
+import BaseChip   from '@/components/atoms/BaseChip.vue'
+import BaseSelect from '@/components/atoms/BaseSelect.vue'
+import AlertBanner from '@/components/molecules/AlertBanner.vue'
 import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
 import { formatAmount } from '@/utils/format.js'
@@ -14,28 +20,42 @@ import { formatAmount } from '@/utils/format.js'
 const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
 
-const showForm = ref(false)
-const editing  = ref(null)
-/** Transaction en cours d'aperçu (clic sur une ligne) — avant de passer à l'édition. */
-const viewing  = ref(null)
+const route  = useRoute()
+const router = useRouter()
+
+const searching = computed(() => transactions.search.trim() !== '')
+
+/** Modale de saisie : ouverte pour créer (`editing` null) ou pour modifier la ligne touchée. */
+const modalOpen = ref(false)
+const editing   = ref(null)
 
 function openCreate() {
-  editing.value  = null
-  showForm.value = true
+  editing.value   = null
+  modalOpen.value = true
 }
 
 function openEdit(transaction) {
-  viewing.value  = null
-  editing.value  = transaction
-  showForm.value = true
+  editing.value   = transaction
+  modalOpen.value = true
 }
 
-function closeForm() {
-  showForm.value = false
-  editing.value  = null
+function closeModal() {
+  modalOpen.value = false
+  editing.value   = null
+}
+
+function onSaved() {
+  transactions.fetchAll()
+  closeModal()
 }
 
 onMounted(() => {
+  // Raccourci de l'app installée (« Ajouter une transaction ») : /transactions?new=1
+  if ('new' in route.query) {
+    openCreate()
+    router.replace({ query: {} })
+  }
+
   transactions.fetchAll()
   categories.fetchAll().catch(() => {})
 })
@@ -49,48 +69,62 @@ onMounted(() => {
         <div>
           <BaseText as="h1" size="2xl" weight="bold" color="primary">Transactions</BaseText>
           <BaseText as="p" size="sm" color="muted">
-            {{ transactions.total }}
-            {{ transactions.total > 1 ? 'opérations' : 'opération' }}
+            <template v-if="searching">
+              {{ transactions.visibleItems.length }}
+              {{ transactions.visibleItems.length > 1 ? 'résultats' : 'résultat' }}
+            </template>
+            <template v-else>
+              {{ transactions.total }}
+              {{ transactions.total > 1 ? 'opérations' : 'opération' }}
+            </template>
           </BaseText>
         </div>
 
-        <BaseButton v-if="!showForm" variant="primary" @click="openCreate">
+        <BaseButton class="transactions__add" variant="primary" @click="openCreate">
           <BaseIcon name="plus" :size="18" />
           Ajouter
         </BaseButton>
       </header>
 
+      <BaseInput
+        :model-value="transactions.search"
+        type="search"
+        label="Rechercher une transaction"
+        hide-label
+        placeholder="Rechercher un libellé, une note…"
+        @update:model-value="transactions.setSearch($event).catch(() => {})"
+      />
+
       <div class="filters">
         <div class="filters__group" role="group" aria-label="Filtrer par type">
-          <button
+          <BaseChip
             v-for="option in [
               { value: '',        label: 'Tout'     },
               { value: 'expense', label: 'Dépenses' },
               { value: 'income',  label: 'Revenus'  },
             ]"
             :key="option.value"
-            type="button"
-            class="filters__chip"
-            :class="{ 'filters__chip--active': transactions.filters.type === option.value }"
-            :aria-pressed="transactions.filters.type === option.value"
+            :active="transactions.filters.type === option.value"
             @click="transactions.setFilter('type', option.value)"
           >
             {{ option.label }}
-          </button>
+          </BaseChip>
         </div>
 
-        <select
-          :value="transactions.filters.categoryId"
-          class="filters__select"
-          aria-label="Filtrer par catégorie"
-          @change="transactions.setFilter('categoryId', $event.target.value)"
-        >
-          <option value="">Toutes les catégories</option>
-          <option value="none">Sans catégorie</option>
-          <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
-            {{ category.label }}
-          </option>
-        </select>
+        <div class="filters__select">
+          <BaseSelect
+            :model-value="transactions.filters.categoryId"
+            size="sm"
+            aria-label="Filtrer par catégorie"
+            @update:model-value="transactions.setFilter('categoryId', $event)"
+          >
+            <option value="">Toutes les catégories</option>
+            <option value="none">Sans catégorie</option>
+            <option v-for="category in categories.flatOptions" :key="category.id" :value="category.id">
+              {{ category.label }}
+            </option>
+          </BaseSelect>
+        </div>
 
         <DateRangePicker
           :from="transactions.filters.from"
@@ -98,50 +132,53 @@ onMounted(() => {
           @change="transactions.setDateRange($event)"
         />
 
-        <button
-          v-if="transactions.hasFilters"
-          type="button"
-          class="filters__reset"
-          @click="transactions.resetFilters()"
-        >
+        <BaseButton v-if="transactions.hasFilters" variant="ghost" size="sm" @click="transactions.resetFilters()">
           Réinitialiser
-        </button>
+        </BaseButton>
       </div>
     </div>
 
-    <TransactionForm
-      v-if="showForm"
-      :transaction="editing"
-      @saved="transactions.fetchAll()"
-      @deleted="transactions.fetchAll()"
-      @close="closeForm"
-    />
-
-    <div v-if="transactions.error" class="transactions__error" role="alert">
-      <BaseText size="sm" color="danger">{{ transactions.error }}</BaseText>
-    </div>
+    <AlertBanner v-if="transactions.error">{{ transactions.error }}</AlertBanner>
 
     <TransactionList
-      :transactions="transactions.items"
+      :transactions="transactions.visibleItems"
       :loading="transactions.loading"
       clickable
       :empty-label="transactions.hasFilters
         ? 'Aucune transaction ne correspond à ces filtres.'
         : 'Aucune transaction — commencez par en ajouter une.'"
-      @select="viewing = $event"
+      @select="openEdit"
     />
 
-    <BaseText v-if="transactions.items.length" as="p" size="xs" color="muted" class="transactions__total">
+    <BaseButton
+      v-if="transactions.hasMore && (!searching || transactions.error)"
+      variant="secondary"
+      full
+      :loading="transactions.loadingMore"
+      @click="transactions.loadMore().catch(() => {})"
+    >
+      Charger plus ({{ transactions.remaining }} restantes)
+    </BaseButton>
+
+    <BaseText v-if="transactions.visibleItems.length" as="p" size="xs" color="muted" class="transactions__total">
       Total affiché :
-      {{ formatAmount(transactions.items.reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0)) }}
+      {{ formatAmount(transactions.visibleItems.reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0)) }}
     </BaseText>
 
-    <TransactionDetail
-      v-if="viewing"
-      :transaction="viewing"
-      @edit="openEdit(viewing)"
-      @close="viewing = null"
-    />
+    <FabButton label="Ajouter une transaction" @click="openCreate" />
+
+    <FormModal
+      v-if="modalOpen"
+      :title="editing ? 'Modifier la transaction' : 'Nouvelle transaction'"
+      @close="closeModal"
+    >
+      <TransactionForm
+        :transaction="editing"
+        @saved="onSaved"
+        @deleted="onSaved"
+        @cancel="closeModal"
+      />
+    </FormModal>
   </section>
 </template>
 
@@ -174,13 +211,6 @@ onMounted(() => {
   gap: var(--space-3);
 }
 
-.transactions__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-
 .filters {
   display: flex;
   flex-wrap: wrap;
@@ -193,48 +223,16 @@ onMounted(() => {
   gap: var(--space-2);
 }
 
-.filters__chip {
-  padding: var(--space-2) var(--space-3);
-  min-height: 2.25rem;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  transition: color var(--transition-fast), border-color var(--transition-fast),
-              background var(--transition-fast);
-}
-
-.filters__chip--active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-subtle);
-  color: var(--color-primary);
-}
-
 .filters__select {
   flex: 1;
   min-width: 10rem;
-  min-height: 2.25rem;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
 }
 
-.filters__reset {
-  padding: var(--space-2) var(--space-3);
-  min-height: 2.25rem;
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  transition: color var(--transition-fast), background var(--transition-fast);
-}
+/* Mobile : l'ajout passe par le bouton flottant ; « Ajouter » ne sert qu'à partir de 1024 px. */
+.transactions__add { display: none; }
 
-.filters__reset:hover {
-  color: var(--color-danger);
-  background: var(--color-danger-subtle);
+@media (min-width: 1024px) {
+  .transactions__add { display: inline-flex; }
 }
 
 .transactions__total {

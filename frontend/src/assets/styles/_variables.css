@@ -14,7 +14,7 @@
 
 :root {
   /* ---- Palette sombre (défaut) ---- */
-  --color-bg-base:       #0d0d1a;
+  --color-bg-base:       #0b0b17;
   --color-bg-surface:    #1a1a2e;
   --color-bg-elevated:   #252545;
   --color-bg-overlay:    rgba(26, 26, 46, 0.95);
@@ -22,13 +22,18 @@
   --color-border:        rgba(255, 255, 255, 0.08);
   --color-border-focus:  rgba(100, 180, 255, 0.6);
 
-  --color-primary:       #4f8ef7;
+  --color-primary:       #488efe;
   --color-primary-hover: #6ba4ff;
-  --color-primary-subtle:rgba(79, 142, 247, 0.12);
-  --color-primary-ring:  rgba(79, 142, 247, 0.15);
+  --color-primary-subtle:rgba(72, 142, 254, 0.12);
+  --color-primary-ring:  rgba(72, 142, 254, 0.15);
 
-  --color-success:       #4ade80;
-  --color-success-subtle:rgba(74, 222, 128, 0.12);
+  --color-success:       #4dde93;
+  --color-success-subtle:rgba(77, 222, 147, 0.12);
+
+  /* Accent menthe — les pièces de la tirelire (branding/abyss2-icon.png) */
+  --color-accent:        #4dde93;
+  --color-accent-hover:  #6ee7a8;
+  --color-accent-subtle: rgba(77, 222, 147, 0.12);
   --color-warning:       #facc15;
   --color-warning-subtle:rgba(250, 204, 21, 0.12);
   --color-danger:        #f87171;
@@ -36,14 +41,15 @@
 
   --color-text-primary:  #f0f0ff;
   --color-text-secondary:#9898b8;
-  --color-text-muted:    #5c5c7a;
-  --color-text-inverse:  #0d0d1a;
+  --color-text-muted:    #8d8dad;
+  --color-text-inverse:  #0b0b17;
 
   /* ---- Shadows ---- */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
   --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
-  --shadow-glow-primary: 0 0 20px rgba(79, 142, 247, 0.25);
+  --shadow-glow-primary: 0 0 20px rgba(72, 142, 254, 0.25);
+  --shadow-glow-accent:  0 0 20px rgba(77, 222, 147, 0.25);
 
   /* Contrôles natifs (scrollbars, inputs date, autofill…) */
   color-scheme: dark;
@@ -107,6 +113,12 @@
   --z-navbar:  20;
   --z-modal:   100;
   --z-toast:   200;
+  /* Échelle de robustesse des mots de passe : rouge → orange → jaune → vert clair → vert */
+  --strength-0: #f87171;
+  --strength-1: #fb923c;
+  --strength-2: #facc15;
+  --strength-3: #a3e635;
+  --strength-4: #4dde93;
 }
 
 /* ================================================
@@ -120,36 +132,46 @@
   --color-bg-overlay:    rgba(255, 255, 255, 0.95);
 
   --color-border:        rgba(26, 26, 46, 0.12);
-  --color-border-focus:  rgba(79, 142, 247, 0.6);
+  --color-border-focus:  #2a62c9;
 
-  --color-primary:       #2f6fd8;
-  --color-primary-hover: #4f8ef7;
-  --color-primary-subtle:rgba(47, 111, 216, 0.10);
-  --color-primary-ring:  rgba(47, 111, 216, 0.18);
+  --color-primary:       #2a62c9;
+  --color-primary-hover: #2453ad;
+  --color-primary-subtle:rgba(42, 98, 201, 0.10);
+  --color-primary-ring:  rgba(42, 98, 201, 0.18);
 
-  --color-success:       #16a34a;
-  --color-success-subtle:rgba(22, 163, 74, 0.10);
-  --color-warning:       #b45309;
-  --color-warning-subtle:rgba(180, 83, 9, 0.10);
-  --color-danger:        #dc2626;
-  --color-danger-subtle: rgba(220, 38, 38, 0.10);
+  --color-success:       #15803d;
+  --color-success-subtle:rgba(21, 128, 61, 0.10);
+
+  --color-accent:        #0a7a4b;
+  --color-accent-hover:  #086a41;
+  --color-accent-subtle: rgba(10, 122, 75, 0.10);
+  --color-warning:       #92400e;
+  --color-warning-subtle:rgba(146, 64, 14, 0.10);
+  --color-danger:        #b91c1c;
+  --color-danger-subtle: rgba(185, 28, 28, 0.10);
 
   --color-text-primary:  #14142b;
   --color-text-secondary:#4b4b6a;
-  --color-text-muted:    #7c7c99;
+  --color-text-muted:    #6b6b8a;
   --color-text-inverse:  #ffffff;
 
   --shadow-sm: 0 1px 3px rgba(20, 20, 43, 0.08);
   --shadow-md: 0 4px 12px rgba(20, 20, 43, 0.10);
   --shadow-lg: 0 8px 32px rgba(20, 20, 43, 0.14);
-  --shadow-glow-primary: 0 0 20px rgba(47, 111, 216, 0.18);
+  --shadow-glow-primary: 0 0 20px rgba(42, 98, 201, 0.18);
 
   color-scheme: light;
+  /* Échelle de robustesse des mots de passe : rouge → orange → jaune → vert clair → vert */
+  --strength-0: #b91c1c;
+  --strength-1: #ea580c;
+  --strength-2: #a67c00;
+  --strength-3: #65a30d;
+  --strength-4: #15803d;
 }
 
 /* Palette sombre explicite (identique à :root — utile si l'OS est en clair) */
 [data-theme="dark"] {
-  --color-bg-base:       #0d0d1a;
+  --color-bg-base:       #0b0b17;
   --color-bg-surface:    #1a1a2e;
   --color-bg-elevated:   #252545;
   --color-bg-overlay:    rgba(26, 26, 46, 0.95);
@@ -157,13 +179,18 @@
   --color-border:        rgba(255, 255, 255, 0.08);
   --color-border-focus:  rgba(100, 180, 255, 0.6);
 
-  --color-primary:       #4f8ef7;
+  --color-primary:       #488efe;
   --color-primary-hover: #6ba4ff;
-  --color-primary-subtle:rgba(79, 142, 247, 0.12);
-  --color-primary-ring:  rgba(79, 142, 247, 0.15);
+  --color-primary-subtle:rgba(72, 142, 254, 0.12);
+  --color-primary-ring:  rgba(72, 142, 254, 0.15);
 
-  --color-success:       #4ade80;
-  --color-success-subtle:rgba(74, 222, 128, 0.12);
+  --color-success:       #4dde93;
+  --color-success-subtle:rgba(77, 222, 147, 0.12);
+
+  /* Accent menthe — les pièces de la tirelire (branding/abyss2-icon.png) */
+  --color-accent:        #4dde93;
+  --color-accent-hover:  #6ee7a8;
+  --color-accent-subtle: rgba(77, 222, 147, 0.12);
   --color-warning:       #facc15;
   --color-warning-subtle:rgba(250, 204, 21, 0.12);
   --color-danger:        #f87171;
@@ -171,10 +198,16 @@
 
   --color-text-primary:  #f0f0ff;
   --color-text-secondary:#9898b8;
-  --color-text-muted:    #5c5c7a;
-  --color-text-inverse:  #0d0d1a;
+  --color-text-muted:    #8d8dad;
+  --color-text-inverse:  #0b0b17;
 
   color-scheme: dark;
+  /* Échelle de robustesse des mots de passe : rouge → orange → jaune → vert clair → vert */
+  --strength-0: #f87171;
+  --strength-1: #fb923c;
+  --strength-2: #facc15;
+  --strength-3: #a3e635;
+  --strength-4: #4dde93;
 }
 
 /* Aucun choix explicite + OS en clair → palette claire */
@@ -186,19 +219,37 @@
     --color-bg-overlay:    rgba(255, 255, 255, 0.95);
 
     --color-border:        rgba(26, 26, 46, 0.12);
-    --color-border-focus:  rgba(79, 142, 247, 0.6);
+    --color-border-focus:  #2a62c9;
 
-    --color-primary:       #2f6fd8;
-    --color-primary-hover: #4f8ef7;
-    --color-primary-subtle:rgba(47, 111, 216, 0.10);
-    --color-primary-ring:  rgba(47, 111, 216, 0.18);
+    --color-primary:       #2a62c9;
+    --color-primary-hover: #2453ad;
+    --color-primary-subtle:rgba(42, 98, 201, 0.10);
+    --color-primary-ring:  rgba(42, 98, 201, 0.18);
+
+    --color-accent:        #0a7a4b;
+    --color-accent-hover:  #086a41;
+    --color-accent-subtle: rgba(10, 122, 75, 0.10);
+
+    --color-success:       #15803d;
+    --color-success-subtle:rgba(21, 128, 61, 0.10);
+    --color-warning:       #92400e;
+    --color-warning-subtle:rgba(146, 64, 14, 0.10);
+    --color-danger:        #b91c1c;
+    --color-danger-subtle: rgba(185, 28, 28, 0.10);
 
     --color-text-primary:  #14142b;
     --color-text-secondary:#4b4b6a;
-    --color-text-muted:    #7c7c99;
+    --color-text-muted:    #6b6b8a;
     --color-text-inverse:  #ffffff;
 
     color-scheme: light;
+
+    /* Échelle de robustesse des mots de passe : rouge → orange → jaune → vert clair → vert */
+    --strength-0: #b91c1c;
+    --strength-1: #ea580c;
+    --strength-2: #a67c00;
+    --strength-3: #65a30d;
+    --strength-4: #15803d;
   }
 }
 
