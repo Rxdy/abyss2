@@ -23,7 +23,7 @@ import helmet    from '@fastify/helmet'
 import jwt       from '@fastify/jwt'
 import swagger   from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
-import { SESSION_COOKIE } from './utils/session.js'
+import { SESSION_COOKIE, setSessionCookie, shouldRenew } from './utils/session.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -136,13 +136,21 @@ export async function buildApp(opts: { testing?: boolean; prisma?: PrismaClient 
       ? null
       : await fastify.prisma.user.findUnique({
           where:  { id: req.user.userId },
-          select: { tokenVersion: true },
+          select: { tokenVersion: true, sessionMode: true },
         })
 
     if (!current || current.tokenVersion !== req.user.tv) {
       return reply.code(401).send({
         error: 'Session expirée — reconnectez-vous.',
         code:  'TOKEN_REVOKED',
+      })
+    }
+
+    // Renouvellement glissant de la session portée par cookie (voir utils/session.ts) : tant que
+    // l'app sert, la session ne tombe pas. Un client Bearer gère lui-même son jeton.
+    if (!req.headers.authorization && shouldRenew(req.user.iat, current.sessionMode)) {
+      setSessionCookie(fastify, reply, {
+        id: req.user.userId, email: req.user.email ?? '', tokenVersion: current.tokenVersion, sessionMode: current.sessionMode,
       })
     }
   })

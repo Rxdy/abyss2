@@ -13,7 +13,7 @@ import ColorPicker  from '@/components/molecules/ColorPicker.vue'
 import { useDirtyForm }        from '@/composables/useDirtyForm.js'
 import { useCategoriesStore } from '@/stores/categories.store.js'
 import { useToastStore }      from '@/stores/toast.store.js'
-import { parseAmountToCents } from '@/utils/format.js'
+import { parseAmountToCents, currencySymbol } from '@/utils/format.js'
 import { CATEGORY_COLORS }    from '@/utils/palette.js'
 
 const props = defineProps({
@@ -114,7 +114,7 @@ async function submit() {
     <BaseInput
       v-model="form.budget"
       id="category-budget"
-      label="Budget mensuel (€, optionnel)"
+      :label="`Budget mensuel (${currencySymbol()}, optionnel)`"
       placeholder="400"
       inputmode="decimal"
       hint="Plafond de dépenses par mois : une jauge apparaît sur l'accueil."

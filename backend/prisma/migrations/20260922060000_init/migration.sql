@@ -37,6 +37,8 @@ CREATE TABLE dbo.users (
   email_encrypted TEXT        NOT NULL,                    -- AES-256-GCM(email) — pour affichage
   password_hash   TEXT        NOT NULL,
   token_version   INTEGER     NOT NULL DEFAULT 0,           -- incrémenté → invalide tous les JWT déjà émis
+  currency        VARCHAR(3)  NOT NULL DEFAULT 'EUR',        -- devise d'affichage (page Préférences), voir utils/currency.ts
+  session_mode    VARCHAR(10) NOT NULL DEFAULT 'persistent', -- « rester connecté » ou « connexion à chaque session », voir utils/session.ts
   created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -139,7 +141,9 @@ CREATE UNIQUE INDEX uq_transactions_recurring_date ON dbo.transactions(recurring
 -- entrer par un autre chemin (script, psql, futur service).
 -- ============================================================
 ALTER TABLE dbo.users
-  ADD CONSTRAINT chk_users_token_version CHECK (token_version >= 0);
+  ADD CONSTRAINT chk_users_token_version CHECK (token_version >= 0),
+  ADD CONSTRAINT chk_users_currency CHECK (currency IN ('EUR', 'USD', 'GBP', 'CHF', 'CAD')),
+  ADD CONSTRAINT chk_users_session_mode CHECK (session_mode IN ('persistent', 'strict'));
 
 ALTER TABLE dbo.categories
   ADD CONSTRAINT chk_categories_color CHECK (color IS NULL OR color ~* '^#[0-9a-f]{6}$'),
