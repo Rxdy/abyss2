@@ -20,11 +20,56 @@ Légende : 🔴 à traiter en premier · 🟠 important · 🟡 confort / polish
   `NotFoundPage`, `App.vue`, les layouts (`AuthLayout`, `DefaultLayout`) — aucun test unitaire
   dédié aujourd'hui, seuls les parcours Playwright les traversent. Côté API, `mail.ts` (18 % de
   couverture) : l'envoi d'email n'est testé qu'indirectement via `password-reset.test.ts`
-- [ ] 🟡 **Autres notifications** : solde négatif détecté sur le mois affiché · charge fixe jamais
-  rattrapée depuis plusieurs mois · résumé mensuel (recoupe la tâche Stats ci-dessus)
+- [ ] 🟡 **Autres notifications** : charge fixe jamais rattrapée depuis plusieurs mois · résumé
+  mensuel (recoupe la tâche Stats ci-dessus)
 
 ## 2. Fait
 
+- [X] **`BaseInput` transmet ses attributs au champ** : `inputmode="decimal"` (montants) et
+  `autocomplete` arrivent sur l'`<input>` et non plus sur la `<div>` qui l'enveloppe — clavier
+  numérique sur mobile pour les montants. Même correctif que `BaseSelect`
+- [X] **Déploiement continu sur meliodas** : job `deploy` de la CI (push sur `main`, après les trois
+  jobs de tests) → Tailscale éphémère `tag:ci` → SSH → dépôt placé sur le commit testé →
+  `scripts/deploy.sh` (pg_dump dans `backups/`, 14 gardées → `make up-prod` → attente de santé API +
+  front, logs si échec). Environnement GitHub `production`, un déploiement à la fois. Mise en place
+  unique décrite dans le README (« Déploiement continu »)
+- [X] **Mode de session au choix (Préférences)** : `users.session_mode` — « Rester connecté »
+  (cookie persistant 30 j) ou « Connexion à chaque session » (cookie de session, effacé à la
+  fermeture du navigateur, + 30 min d'inactivité). Dans les deux cas, renouvellement glissant dans
+  `authenticate` (cookie seulement, jamais le CSRF) : plus d'expiration en cours d'usage. Passer en
+  mode strict déconnecte les autres appareils. Session tombée (401 UNAUTHORIZED / TOKEN_REVOKED /
+  USER_NOT_FOUND) : retour au login avec « Votre session a expiré » au lieu d'une erreur dans la
+  page ; un 401 « mot de passe incorrect » ne déconnecte pas
+- [X] **Profil réorganisé — Gestion du compte et Préférences** : `/profile/account` (changer l'email —
+  `PUT /api/user/email`, mot de passe redemandé, adresse normalisée, 409 si prise, autres appareils
+  déconnectés — et le mot de passe, en place et non plus en modale) ; `/profile/preferences` (thème,
+  devise, notifications). Devise d'affichage sur le compte (`users.currency`, EUR/USD/GBP/CHF/CAD,
+  `PUT /api/user/preferences`) : montants, libellés de saisie et messages de notification suivent,
+  sans rechargement ; les montants ne sont pas convertis. Modale de transaction compacte (montant et
+  date côte à côte, Supprimer | Enregistrer sur une ligne) : tient sans défiler dès 375×667
+- [X] **Réglages dans le Profil** : « Apparence » (Sombre / Clair / Système — le mode système suit
+  l'appareil en direct ; la bascule soleil/lune quitte l'en-tête, reste sur les pages de connexion)
+  et « Notifications » (un interrupteur par type, `GET/PUT /api/user/notification-settings`,
+  colonnes `notify_*` sur `users` ; un type coupé n'est plus généré du tout, l'historique reste)
+- [X] **Notifications — finitions** : chiffres relus à chaque lecture (digest : nombre actuel de
+  dépenses non catégorisées, « toutes catégorisées » s'il n'en reste plus ; dépassement : montant
+  dépensé dans le mois du dépassement et plafond, ou « revenue sous le plafond depuis »), icône
+  portefeuille et teinte d'alerte pour dépassement et solde négatif, « Tout marquer comme lu »
+  (`POST /api/notifications/read-all`, archivées exclues)
+- [X] **Seed réparé et `make db-fresh`** : `make seed` ne passait plus depuis la session par cookie
+  (il attendait un `token` dans la réponse du login) — il lit désormais le cookie et parle en
+  Bearer. Enveloppes de démo, révision voiture (dépassement garanti quel que soit le jour) et
+  réparation chaudière (solde négatif) : les trois notifications naissent d'opérations réelles et le
+  seed échoue si l'une manque. `make db-fresh` = base vierge + migrations + comptes + seed ;
+  `db-reset` attend désormais PostgreSQL (`up --wait`) avant de migrer
+- [X] **Notifications — solde négatif et correctifs** : `negative_balance` quand une écriture fait
+  passer le solde global de ≥ 0 à < 0. Enveloppe et solde réévalués après toute écriture (création,
+  modification, suppression, rattrapage des charges fixes) via `notifyAfterChange`, qui ne compte
+  que la contribution de l'écriture au mois courant (une dépense datée d'un autre mois ne déclenche
+  plus de faux dépassement). Date du dernier digest sur `users.last_uncategorized_digest_at`,
+  réservée par mise à jour conditionnelle : supprimer le digest ne le recrée plus, deux lectures
+  simultanées n'en créent plus deux. Front : ouvrir une notification mène à l'écran concerné, badge
+  rafraîchi à chaque navigation et après chaque écriture, toast pour les nouvelles alertes
 - [X] **Notifications** : enveloppe dépassée (réactif, seulement au franchissement du plafond, pas à
   chaque transaction déjà au-dessus) et dépenses non catégorisées (digest paresseux, au plus une
   fois par semaine, évalué à la lecture — pas de tâche planifiée côté API). Cloche dans l'en-tête

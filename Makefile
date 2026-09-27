@@ -1,4 +1,4 @@
-.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset user seed test test-front test-back test-db test-coverage pwa-build
+.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh deploy user seed test test-front test-back test-db test-coverage pwa-build
 
 # Variables
 COMPOSE := docker compose
@@ -18,6 +18,7 @@ help:
 	@echo "  make up-lan          - Start all services open to the local network (phone testing)"
 	@echo "  make up-prod         - Production: build + start behind Traefik (needs DOMAIN in .env)"
 	@echo "  make down-prod       - Stop the production stack"
+	@echo "  make deploy          - On the server: backup DB, rebuild prod stack, wait until healthy"
 	@echo "  make down            - Stop all services"
 	@echo "  make build           - Build all Docker images"
 	@echo "  make restart         - Restart all services"
@@ -40,6 +41,7 @@ help:
 	@echo "  make user            - Create empty test accounts (test@ / demo@abyss2.dev)"
 	@echo "  make seed            - Fill demo@abyss2.dev with 6 months of realistic data"
 	@echo "  make db-reset        - Reset database (remove all data)"
+	@echo "  make db-fresh        - Blank database + test accounts + demo data (db-reset, user, seed)"
 	@echo ""
 	@echo "Tests:"
 	@echo "  make test            - Run every test suite (front + back + db)"
@@ -87,6 +89,11 @@ up-prod: build-prod
 
 down-prod:
 	@$(PROD_COMPOSE) down
+
+# Sur le serveur de production : sauvegarde, build + relance, attente de santé (scripts/deploy.sh).
+# La CI l'appelle après chaque merge sur main ; utilisable à la main pour redéployer.
+deploy:
+	@./scripts/deploy.sh
 
 down:
 	@echo "🛑 Stopping Abyss2 services..."
@@ -172,10 +179,29 @@ db-reset:
 	@echo "⚠️  Resetting database..."
 	@$(COMPOSE) -f docker-compose.yml down -v postgres
 	@sleep 2
-	@$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d postgres
+	@# --wait : attend le healthcheck (pg_isready) — sans ça, les migrations partaient parfois avant que PostgreSQL accepte les connexions.
+	@$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d --wait postgres
 	@echo "⏳ Applying migrations..."
 	@$(COMPOSE) -f docker-compose.yml exec -T api npx prisma migrate deploy
 	@echo "✓ Database reset completed!"
+
+# Repart de zéro et remet l'app dans un état « vivant » : base vierge, migrations, comptes de test,
+# compte de démo rempli. Le seed vérifie lui-même que les notifications attendues sont apparues —
+# si cette commande passe, toute la chaîne (schéma, API, chiffrement, charges fixes, notifications)
+# fonctionne sur une base neuve.
+db-fresh:
+	@$(COMPOSE) -f docker-compose.yml ps --status running --services 2>/dev/null | grep -qx api \
+		|| { echo "✗ L'API n'est pas démarrée — lancez d'abord : make up"; exit 1; }
+	@$(MAKE) --no-print-directory db-reset
+	@# Redémarrer l'API régénère le client Prisma (npm run dev) : sans ça, une colonne ajoutée au
+	@# schéma depuis le démarrage du conteneur est inconnue de l'API et le seed échoue.
+	@$(COMPOSE) -f docker-compose.yml restart api >/dev/null
+	@echo "⏳ Attente de l'API..."
+	@for i in $$(seq 1 30); do curl -sf $(API_URL)/health >/dev/null && break; sleep 1; done; \
+		curl -sf $(API_URL)/health >/dev/null || { echo "✗ L'API ne répond pas sur $(API_URL)/health"; exit 1; }
+	@$(MAKE) --no-print-directory user
+	@$(MAKE) --no-print-directory seed
+	@echo "✓ Base vierge remplie — $(FRONTEND_URL)/login"
 
 user:
 	@echo "👤 Création des comptes de test..."

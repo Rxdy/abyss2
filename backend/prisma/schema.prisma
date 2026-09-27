@@ -22,6 +22,13 @@ model User {
   emailEncrypted String   @map("email_encrypted") @db.Text            // AES-256-GCM — pour affichage
   passwordHash   String   @map("password_hash") @db.Text
   tokenVersion   Int      @default(0) @map("token_version")          // incrémenté → invalide tous les JWT déjà émis
+  currency       String   @default("EUR") @db.VarChar(3)              // devise d'affichage (voir utils/currency.ts)
+  sessionMode    String   @default("persistent") @map("session_mode") @db.VarChar(10) // 'persistent' | 'strict' (voir utils/session.ts)
+  lastUncategorizedDigestAt DateTime? @map("last_uncategorized_digest_at") @db.Timestamptz() // dernier digest « non catégorisées » (voir utils/notifications.ts)
+  // Réglages des notifications (page Profil) : un type coupé n'est plus généré
+  notifyEnvelopeOverspend   Boolean   @default(true) @map("notify_envelope_overspend")
+  notifyNegativeBalance     Boolean   @default(true) @map("notify_negative_balance")
+  notifyUncategorizedDigest Boolean   @default(true) @map("notify_uncategorized_digest")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -197,7 +204,7 @@ model RecurringTransaction {
 model Notification {
   id         String    @id @default(uuid()) @db.Uuid
   userId     String    @map("user_id") @db.Uuid
-  type       String    @db.VarChar(30)  // 'envelope_overspend' | 'uncategorized_digest'
+  type       String    @db.VarChar(30)  // 'envelope_overspend' | 'uncategorized_digest' | 'negative_balance'
   envelopeId String?   @map("envelope_id") @db.Uuid
   count      Int?                        // nombre de transactions concernées (digest)
   read       Boolean   @default(false)

@@ -107,3 +107,27 @@ describe('auth store', () => {
     expect(auth.isAuthenticated).toBe(true)
   })
 })
+
+describe('auth.store — devise du compte', () => {
+  it('la session pose la devise d\'affichage ; la déconnexion revient à l\'euro', async () => {
+    const { getCurrency } = await import('@/utils/format.js')
+    const store = useAuthStore()
+
+    store.setSession({ user: { id: 'u1', email: 'a@b.c', currency: 'CAD' } })
+    expect(getCurrency()).toBe('CAD')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+    await store.logout()
+    expect(getCurrency()).toBe('EUR')
+  })
+
+  it('updateUser modifie le compte connu sans perdre le reste', () => {
+    const store = useAuthStore()
+    store.setSession({ user: { id: 'u1', email: 'a@b.c', currency: 'EUR' } })
+
+    store.updateUser({ email: 'new@b.c' })
+
+    expect(store.user).toEqual({ id: 'u1', email: 'new@b.c', currency: 'EUR' })
+    expect(JSON.parse(localStorage.getItem('abyss2_user')).email).toBe('new@b.c')
+  })
+})

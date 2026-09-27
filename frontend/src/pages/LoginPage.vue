@@ -50,6 +50,9 @@ async function submit() {
   <AuthShell subtitle="Connectez-vous à votre espace">
     <Transition name="fade">
       <AlertBanner v-if="errors.global">{{ errors.global }}</AlertBanner>
+      <AlertBanner v-else-if="auth.sessionExpired" variant="warning">
+        Votre session a expiré. Reconnectez-vous pour continuer.
+      </AlertBanner>
     </Transition>
 
     <form class="auth-form" novalidate @submit.prevent="submit">

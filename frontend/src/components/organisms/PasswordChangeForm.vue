@@ -1,6 +1,7 @@
 <script setup>
 /*
- * Changement de mot de passe, prévu pour vivre dans une modale (FormModal).
+ * Changement de mot de passe — dans une modale (FormModal) ou directement dans
+ * une page (Gestion du compte, `cancelable` à false : rien à annuler).
  * Le serveur invalide les autres sessions et renvoie un nouveau jeton, qui
  * garde cet appareil connecté. `saved` / `cancel` préviennent le parent.
  */
@@ -12,6 +13,11 @@ import { useToastStore } from '@/stores/toast.store.js'
 import BaseButton  from '@/components/atoms/BaseButton.vue'
 import BaseInput   from '@/components/atoms/BaseInput.vue'
 import AlertBanner from '@/components/molecules/AlertBanner.vue'
+
+defineProps({
+  /** Bouton « Annuler » (utile dans une modale). */
+  cancelable: { type: Boolean, default: true },
+})
 
 const emit = defineEmits(['saved', 'cancel'])
 
@@ -96,7 +102,7 @@ async function submit() {
       <BaseButton type="submit" variant="primary" :loading="loading" full>
         Changer le mot de passe
       </BaseButton>
-      <BaseButton type="button" variant="ghost" full @click="emit('cancel')">
+      <BaseButton v-if="cancelable" type="button" variant="ghost" full @click="emit('cancel')">
         Annuler
       </BaseButton>
     </div>

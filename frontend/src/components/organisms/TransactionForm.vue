@@ -17,7 +17,7 @@ import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
 import { useCoinDropStore }     from '@/stores/coinDrop.store.js'
 import { useToastStore }        from '@/stores/toast.store.js'
-import { parseAmountToCents, todayISO } from '@/utils/format.js'
+import { currencySymbol, parseAmountToCents, todayISO } from '@/utils/format.js'
 
 const props = defineProps({
   /** Transaction à modifier — absente = création */
@@ -130,23 +130,26 @@ async function remove() {
       required
     />
 
-    <BaseInput
-      v-model="form.amount"
-      id="transaction-amount"
-      label="Montant (€)"
-      placeholder="42,50"
-      inputmode="decimal"
-      :error="errors.amount"
-      required
-    />
+    <!-- Montant et date côte à côte : toute la transaction tient dans la modale sans défiler. -->
+    <div class="transaction-form__pair">
+      <BaseInput
+        v-model="form.amount"
+        id="transaction-amount"
+        :label="`Montant (${currencySymbol()})`"
+        placeholder="42,50"
+        inputmode="decimal"
+        :error="errors.amount"
+        required
+      />
 
-    <BaseInput
-      v-model="form.date"
-      id="transaction-date"
-      type="date"
-      label="Date"
-      required
-    />
+      <BaseInput
+        v-model="form.date"
+        id="transaction-date"
+        type="date"
+        label="Date"
+        required
+      />
+    </div>
 
     <BaseSelect v-model="form.categoryId" id="transaction-category" label="Catégorie">
       <option value="">Aucune</option>
@@ -161,11 +164,9 @@ async function remove() {
       label="Note (optionnelle)"
     />
 
+    <!-- Une seule ligne : l'action destructrice (ou l'abandon) à gauche, la validation à droite.
+         En modification, la croix de la modale suffit pour fermer sans rien changer. -->
     <div class="transaction-form__actions">
-      <BaseButton type="submit" variant="primary" :loading="loading" full>
-        {{ isEdit ? 'Enregistrer' : 'Ajouter' }}
-      </BaseButton>
-
       <BaseButton
         v-if="isEdit"
         type="button"
@@ -176,9 +177,12 @@ async function remove() {
       >
         Supprimer
       </BaseButton>
-
-      <BaseButton type="button" variant="ghost" full @click="emit('cancel')">
+      <BaseButton v-else type="button" variant="ghost" full @click="emit('cancel')">
         Annuler
+      </BaseButton>
+
+      <BaseButton type="submit" variant="primary" :loading="loading" full>
+        {{ isEdit ? 'Enregistrer' : 'Ajouter' }}
       </BaseButton>
     </div>
   </form>
@@ -202,12 +206,16 @@ async function remove() {
 .transaction-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
+.transaction-form__pair,
 .transaction-form__actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  align-items: start;
 }
+
+.transaction-form__actions { margin-top: var(--space-1); }
 </style>

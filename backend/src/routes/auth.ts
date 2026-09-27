@@ -60,7 +60,7 @@ interface Credentials {
  * tel quel — un copier-coller en garde facilement un). Le front les retire déjà de son côté, mais
  * un appel direct à l'API (script, Swagger) ne bénéficie pas de cette étape.
  */
-function trimEmail(req: FastifyRequest, _reply: FastifyReply, done: (err?: Error) => void) {
+export function trimEmail(req: FastifyRequest, _reply: FastifyReply, done: (err?: Error) => void) {
   const body = req.body as { email?: unknown } | undefined
   if (body && typeof body.email === 'string') body.email = body.email.trim()
   done()
@@ -211,8 +211,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
             user:  {
               type: 'object',
               properties: {
-                id:    { type: 'string', format: 'uuid' },
-                email: { type: 'string' },
+                id:       { type: 'string', format: 'uuid' },
+                email:    { type: 'string' },
+                currency: { type: 'string', description: 'Devise d\'affichage choisie dans les Préférences' },
+                sessionMode: { type: 'string', enum: ['persistent', 'strict'], description: 'Rester connecté, ou connexion à chaque session' },
               },
             },
           },
@@ -239,6 +241,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
         emailEncrypted: true,
         passwordHash:   true,
         tokenVersion:   true,
+        currency:       true,
+        sessionMode:    true,
       },
     })
 
@@ -255,12 +259,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const decryptedEmail = decryptEmail(user.emailEncrypted)
 
     const { csrfToken } = issueSession(fastify, reply, {
-      id: user.id, email: decryptedEmail, tokenVersion: user.tokenVersion,
+      id: user.id, email: decryptedEmail, tokenVersion: user.tokenVersion, sessionMode: user.sessionMode,
     })
 
     return reply.code(200).send({
       csrfToken,
-      user: { id: user.id, email: decryptedEmail },
+      user: { id: user.id, email: decryptedEmail, currency: user.currency, sessionMode: user.sessionMode },
     })
   })
 
@@ -364,7 +368,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const updated = await fastify.prisma.user.update({
       where:  { id: user.id },
       data:   { passwordHash, tokenVersion: { increment: 1 } },
-      select: { tokenVersion: true },
+      select: { tokenVersion: true, sessionMode: true },
     })
 
     await fastify.prisma.passwordResetToken.update({
@@ -383,6 +387,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       id: user.id,
       email: decryptEmail(user.emailEncrypted),
       tokenVersion: updated.tokenVersion,
+      sessionMode: updated.sessionMode,
     })
 
     return reply.code(200).send({ csrfToken })

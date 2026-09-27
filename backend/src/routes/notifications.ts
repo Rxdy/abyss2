@@ -1,17 +1,20 @@
 /**
  * Routes /api/notifications
  *
- * Deux types générés côté serveur (voir utils/notifications.ts) : enveloppe dépassée, dépenses non
- * catégorisées. Le titre et le message ne sont jamais stockés : reconstruits à la lecture à partir
- * de `type` (+ `envelopeId`/`count`) — rien de texte libre à chiffrer ici, contrairement aux autres
- * ressources de l'app.
+ * Trois types générés côté serveur (voir utils/notifications.ts) : enveloppe dépassée, solde
+ * négatif, dépenses non catégorisées. Le titre et le message ne sont jamais stockés : reconstruits
+ * à la lecture à partir de `type` (+ `envelopeId`) et de chiffres relus au même moment (voir
+ * loadLiveFigures) — rien de texte libre à chiffrer ici, contrairement aux autres ressources de
+ * l'app.
  */
 
 import type { FastifyInstance } from 'fastify'
 import { decryptValue } from '../utils/crypto.js'
 import { maybeCreateUncategorizedDigest } from '../utils/notifications.js'
-import { ENVELOPE_NAME_USAGE } from './envelopes.js'
+import { ENVELOPE_NAME_USAGE, ENVELOPE_BUDGET_USAGE } from './envelopes.js'
+import { AMOUNT_USAGE } from './transactions.js'
 import type { ApiError } from '../types.js'
+import { formatCents } from '../utils/currency.js'
 
 const errorSchema = {
   type: 'object',
@@ -41,26 +44,110 @@ interface NotificationRow {
   read: boolean
   archived: boolean
   createdAt: Date
-  envelope: { nameEncrypted: string } | null
+  envelope: { nameEncrypted: string; budgetEncrypted: string; categories: { id: string }[] } | null
+}
+
+/** Ce qu'il faut relire pour chaque ligne : l'enveloppe, son plafond et ses catégories. */
+const ROW_INCLUDE = {
+  envelope: { select: { nameEncrypted: true, budgetEncrypted: true, categories: { select: { id: true } } } },
+} as const
+
+const monthLabel = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+/** Bornes UTC du mois d'une date (celui où le dépassement a eu lieu). */
+function monthOf(date: Date) {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
+  const end   = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0))
+  return { start, end, key: start.toISOString().slice(0, 7) }
+}
+
+/**
+ * Chiffres « vivants » des notifications, relus à chaque lecture plutôt que figés à la création :
+ * le nombre actuel de dépenses non catégorisées (le digest ne reste pas bloqué sur un chiffre
+ * périmé une fois les dépenses catégorisées), et, pour chaque dépassement, ce qui a été dépensé
+ * dans l'enveloppe au cours du mois concerné. Rien de tout ça n'est stocké : les montants restent
+ * chiffrés en base, seules ces lectures les déchiffrent.
+ */
+interface LiveFigures {
+  currency: string
+  uncategorized: number
+  spent: Map<string, number> // clé `${envelopeId}|${yyyy-mm}`
+}
+
+async function loadLiveFigures(fastify: FastifyInstance, userId: string, rows: NotificationRow[]): Promise<LiveFigures> {
+  const user = await fastify.prisma.user.findUnique({ where: { id: userId }, select: { currency: true } })
+  const figures: LiveFigures = { currency: user?.currency ?? 'EUR', uncategorized: 0, spent: new Map() }
+
+  if (rows.some((row) => row.type === 'uncategorized_digest')) {
+    figures.uncategorized = await fastify.prisma.transaction.count({
+      where: { userId, type: 'expense', categoryId: null },
+    })
+  }
+
+  for (const row of rows) {
+    if (row.type !== 'envelope_overspend' || !row.envelope || !row.envelopeId) continue
+    const { start, end, key } = monthOf(row.createdAt)
+    const spentKey = `${row.envelopeId}|${key}`
+    if (figures.spent.has(spentKey)) continue
+
+    const expenses = await fastify.prisma.transaction.findMany({
+      where: {
+        userId,
+        type:       'expense',
+        categoryId: { in: row.envelope.categories.map((c) => c.id) },
+        date:       { gte: start, lte: end },
+      },
+      select: { amountEncrypted: true },
+    })
+    figures.spent.set(spentKey, expenses.reduce((sum, t) => sum + parseInt(decryptValue(t.amountEncrypted, AMOUNT_USAGE), 10), 0))
+  }
+
+  return figures
 }
 
 /** Titre + message reconstruits à partir du type — voir le commentaire d'en-tête. */
-function toApi(row: NotificationRow) {
-  const envelopeName = row.envelope ? decryptValue(row.envelope.nameEncrypted, ENVELOPE_NAME_USAGE) : null
+function describe(row: NotificationRow, figures: LiveFigures) {
+  switch (row.type) {
+    case 'envelope_overspend': {
+      if (!row.envelope || !row.envelopeId) {
+        return { title: 'Enveloppe dépassée', message: 'Une enveloppe a dépassé son plafond mensuel.' }
+      }
+      const name   = decryptValue(row.envelope.nameEncrypted, ENVELOPE_NAME_USAGE)
+      const budget = parseInt(decryptValue(row.envelope.budgetEncrypted, ENVELOPE_BUDGET_USAGE), 10)
+      const { key } = monthOf(row.createdAt)
+      const spent  = figures.spent.get(`${row.envelopeId}|${key}`) ?? 0
+      const month  = monthLabel.format(row.createdAt)
+      const money  = (cents: number) => formatCents(cents, figures.currency)
 
-  const { title, message } = row.type === 'envelope_overspend'
-    ? {
+      return {
         title:   'Enveloppe dépassée',
-        message: envelopeName
-          ? `L'enveloppe « ${envelopeName} » a dépassé son plafond mensuel.`
-          : 'Une enveloppe a dépassé son plafond mensuel.',
+        message: spent > budget
+          ? `« ${name} » : ${money(spent)} dépensés en ${month}, pour un plafond de ${money(budget)}.`
+          // Dépenses supprimées ou plafond relevé depuis : on le dit plutôt que d'afficher un « dépassé » contredit par les chiffres.
+          : `« ${name} » a dépassé son plafond en ${month}, mais est depuis revenue à ${money(spent)} sur ${money(budget)}.`,
       }
-    : {
+    }
+    case 'negative_balance':
+      return {
+        title:   'Solde négatif',
+        message: 'Votre solde est passé sous zéro.',
+      }
+    default: {
+      const count = figures.uncategorized
+      return {
         title:   'Dépenses non catégorisées',
-        message: (row.count ?? 0) > 1
-          ? `${row.count} dépenses ne sont rattachées à aucune catégorie.`
-          : `${row.count} dépense n'est rattachée à aucune catégorie.`,
+        message: count === 0
+          ? 'Toutes vos dépenses sont désormais rattachées à une catégorie.'
+          : count > 1
+            ? `${count} dépenses ne sont rattachées à aucune catégorie.`
+            : '1 dépense n\'est rattachée à aucune catégorie.',
       }
+    }
+  }
+}
+
+function toApi(row: NotificationRow, figures: LiveFigures) {
+  const { title, message } = describe(row, figures)
 
   return {
     id:         row.id,
@@ -68,7 +155,7 @@ function toApi(row: NotificationRow) {
     title,
     message,
     envelopeId: row.envelopeId,
-    count:      row.count,
+    count:      row.type === 'uncategorized_digest' ? figures.uncategorized : row.count,
     read:       row.read,
     archived:   row.archived,
     createdAt:  row.createdAt,
@@ -95,10 +182,11 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     const rows = await fastify.prisma.notification.findMany({
       where:   { userId: req.user.userId, archived: req.query.archived === 'true' },
       orderBy: { createdAt: 'desc' },
-      include: { envelope: { select: { nameEncrypted: true } } },
+      include: ROW_INCLUDE,
     })
 
-    return rows.map(toApi)
+    const figures = await loadLiveFigures(fastify, req.user.userId, rows)
+    return rows.map((row) => toApi(row, figures))
   })
 
   // ── GET /api/notifications/unread-count ──────────────────
@@ -118,6 +206,28 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     })
 
     return { count }
+  })
+
+  // ── POST /api/notifications/read-all ─────────────────────
+  fastify.post('/api/notifications/read-all', {
+    schema: {
+      summary: 'Marquer toutes les notifications actives comme lues',
+      tags: ['notifications'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: { type: 'object', properties: { updated: { type: 'integer', description: 'Nombre de notifications passées en lues' } } },
+        401: errorSchema,
+      },
+    },
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req) => {
+    // Les archivées ne comptent pas dans le badge : on ne touche qu'à ce que l'utilisateur voit.
+    const { count } = await fastify.prisma.notification.updateMany({
+      where: { userId: req.user.userId, read: false, archived: false },
+      data:  { read: true },
+    })
+
+    return { updated: count }
   })
 
   // ── PUT /api/notifications/:id ────────────────────────────
@@ -157,10 +267,10 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
         ...(read     !== undefined && { read }),
         ...(archived !== undefined && { archived }),
       },
-      include: { envelope: { select: { nameEncrypted: true } } },
+      include: ROW_INCLUDE,
     })
 
-    return reply.code(200).send(toApi(updated))
+    return reply.code(200).send(toApi(updated, await loadLiveFigures(fastify, req.user.userId, [updated])))
   })
 
   // ── DELETE /api/notifications/:id ─────────────────────────

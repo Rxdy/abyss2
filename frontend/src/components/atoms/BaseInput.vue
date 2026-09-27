@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed } from 'vue'
 
+// Attributs libres (inputmode, autocomplete…) : sur le vrai champ, pas sur la <div> qui l'enveloppe.
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps({
   modelValue: { type: String, default: '' },
   label:      { type: String, default: '' },
@@ -36,6 +39,7 @@ const inputType    = computed(() => {
 
     <div class="field__input-wrap">
       <input
+        v-bind="$attrs"
         :id="id"
         :type="inputType"
         :value="modelValue"

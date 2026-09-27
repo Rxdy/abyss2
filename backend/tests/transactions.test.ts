@@ -26,6 +26,7 @@ function txRow(
   return {
     id,
     userId: USER_ID,
+    categoryId: category?.id ?? null,
     titleEncrypted:  encryptValue(title, TITLE_USAGE),
     amountEncrypted: encryptValue(String(amount), AMOUNT_USAGE),
     date: new Date(date),
@@ -45,7 +46,11 @@ let token: string
 
 beforeEach(async () => {
   mockPrisma = {
-    user:     { findUnique: vi.fn().mockResolvedValue({ tokenVersion: 0 }) },
+    user:     {
+      findUnique: vi.fn().mockResolvedValue({
+        tokenVersion: 0, notifyEnvelopeOverspend: true, notifyNegativeBalance: true, notifyUncategorizedDigest: true,
+      }),
+    },
     category: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     envelope: { findUnique: vi.fn() },
     notification: { create: vi.fn() },
@@ -423,6 +428,19 @@ describe('POST /api/transactions', () => {
     expect(res.statusCode).toBe(400)
   })
 
+  it('notifie le solde négatif quand la dépense le fait passer sous zéro', async () => {
+    mockPrisma.transaction.create.mockImplementation(async ({ data }: any) => ({ id: TX_ID, ...data, category: null }))
+    // Après la dépense, il ne reste qu'elle : solde −42,50 € ; avant, 0 €.
+    mockPrisma.transaction.findMany.mockResolvedValue([{ amountEncrypted: encryptValue('4250', AMOUNT_USAGE), type: 'expense' }])
+
+    await app.inject({
+      method: 'POST', url: '/api/transactions', headers: auth(),
+      payload: { title: 'Carrefour', amount: 4250, date: '2026-09-05', type: 'expense' },
+    })
+
+    expect(mockPrisma.notification.create).toHaveBeenCalledWith({ data: { userId: USER_ID, type: 'negative_balance' } })
+  })
+
   it('401 sans token', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/transactions',
@@ -434,7 +452,7 @@ describe('POST /api/transactions', () => {
 
 describe('PUT /api/transactions/:id', () => {
   it('200 — modifie le montant', async () => {
-    mockPrisma.transaction.findFirst.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
     mockPrisma.transaction.update.mockResolvedValue(txRow({ amount: 5000 }))
 
     const res = await app.inject({
@@ -459,7 +477,7 @@ describe('PUT /api/transactions/:id', () => {
   })
 
   it('409 — la nouvelle date entre en collision avec une autre échéance de la même charge fixe', async () => {
-    mockPrisma.transaction.findFirst.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
     mockPrisma.transaction.update.mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }))
 
     const res = await app.inject({
@@ -473,7 +491,7 @@ describe('PUT /api/transactions/:id', () => {
   })
 
   it('500 — une autre erreur de la base n\'est pas prise pour un doublon', async () => {
-    mockPrisma.transaction.findFirst.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
     mockPrisma.transaction.update.mockRejectedValue(Object.assign(new Error('boom'), { code: 'P2025' }))
 
     const res = await app.inject({
@@ -484,8 +502,38 @@ describe('PUT /api/transactions/:id', () => {
     expect(res.statusCode).toBe(500)
   })
 
+  it('libellé seul : ne réévalue aucune notification', async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
+    mockPrisma.transaction.update.mockResolvedValue(txRow({ title: 'Lidl' }))
+
+    await app.inject({
+      method: 'PUT', url: `/api/transactions/${TX_ID}`, headers: auth(),
+      payload: { title: 'Lidl' },
+    })
+
+    expect(mockPrisma.transaction.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.notification.create).not.toHaveBeenCalled()
+  })
+
+  it('montant augmenté qui fait passer le solde sous zéro : notifie', async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow({ amount: 1000 }))
+    mockPrisma.transaction.update.mockResolvedValue(txRow({ amount: 5000 }))
+    // Revenu de 30 € + cette dépense passée de 10 € à 50 € : +20 € → −20 €.
+    mockPrisma.transaction.findMany.mockResolvedValue([
+      { amountEncrypted: encryptValue('3000', AMOUNT_USAGE), type: 'income' },
+      { amountEncrypted: encryptValue('5000', AMOUNT_USAGE), type: 'expense' },
+    ])
+
+    await app.inject({
+      method: 'PUT', url: `/api/transactions/${TX_ID}`, headers: auth(),
+      payload: { amount: 5000 },
+    })
+
+    expect(mockPrisma.notification.create).toHaveBeenCalledWith({ data: { userId: USER_ID, type: 'negative_balance' } })
+  })
+
   it('permet de détacher la catégorie', async () => {
-    mockPrisma.transaction.findFirst.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
     mockPrisma.transaction.update.mockResolvedValue(txRow())
 
     await app.inject({
@@ -499,7 +547,7 @@ describe('PUT /api/transactions/:id', () => {
 
 describe('DELETE /api/transactions/:id', () => {
   it('200 — supprime', async () => {
-    mockPrisma.transaction.findFirst.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow())
     mockPrisma.transaction.delete.mockResolvedValue({ id: TX_ID })
 
     const res = await app.inject({
@@ -508,6 +556,16 @@ describe('DELETE /api/transactions/:id', () => {
 
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ id: TX_ID, deleted: true })
+  })
+
+  it('supprimer un revenu qui fait passer le solde sous zéro : notifie', async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow({ type: 'income', amount: 10000 }))
+    mockPrisma.transaction.delete.mockResolvedValue({ id: TX_ID })
+    mockPrisma.transaction.findMany.mockResolvedValue([{ amountEncrypted: encryptValue('3000', AMOUNT_USAGE), type: 'expense' }])
+
+    await app.inject({ method: 'DELETE', url: `/api/transactions/${TX_ID}`, headers: auth() })
+
+    expect(mockPrisma.notification.create).toHaveBeenCalledWith({ data: { userId: USER_ID, type: 'negative_balance' } })
   })
 
   it('404 — transaction d\'un autre utilisateur', async () => {
