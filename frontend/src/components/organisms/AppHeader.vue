@@ -23,7 +23,7 @@ async function logout() {
     <div class="app-header__left">
       <div class="app-header__brand">
         <AppLogo class="app-header__logo" :size="30" />
-        <BaseText size="lg" weight="bold" color="primary">ABYSS2</BaseText>
+        <BaseText size="lg" weight="bold" color="primary">ABYSS</BaseText>
       </div>
 
       <!-- Barre basse sous 1024px, entrées du header au-delà -->

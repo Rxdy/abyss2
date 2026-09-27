@@ -18,7 +18,7 @@ beforeEach(async () => {
 
 describe('AppHeader — contenu', () => {
   it('affiche la marque', () => {
-    expect(mount(AppHeader).text()).toContain('ABYSS2')
+    expect(mount(AppHeader).text()).toContain('ABYSS')
   })
 
   it('n\'affiche pas l\'email de l\'utilisateur', () => {
