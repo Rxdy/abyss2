@@ -198,80 +198,62 @@ pull request vers `main`, `staging` et `dev` :
 | `backend-unit` | tests API, Prisma mocké — aucune base requise |
 | `backend-db`   | tests d'intégration contre un vrai PostgreSQL (service container + `prisma migrate deploy`) |
 | `frontend`     | tests front + `vite build` |
-| `deploy`       | **push sur `main` seulement**, après les trois autres : déploiement sur meliodas (voir ci-dessous) |
+| `images`       | **push sur `main` seulement**, après les trois autres : images arm64 publiées sur GHCR, installées par watchtower (voir ci-dessous) |
 
 Un merge est bloqué tant que les trois jobs de tests ne sont pas verts.
 
 ## Déploiement continu
 
-Chaque merge sur `main` part en production sur **meliodas**, une fois les tests passés :
+Production : **https://abyss.rxdy.fr**, sur **meliodas** (Raspberry Pi 5, 4 Go) — le même Pi que
+d'autres apps (abview, abflow, portfolio…), derrière leur Traefik commun.
 
 ```
-merge sur main → tests (3 jobs) → job deploy :
-  1. rejoint le tailnet (nœud Tailscale éphémère, tag:ci)
-  2. SSH vers meliodas : dépôt placé sur LE commit testé (git reset --hard <sha>)
-  3. scripts/deploy.sh : sauvegarde pg_dump → make up-prod (migrations au démarrage de l'API)
-     → attente de santé API + front, sinon échec avec les logs
-  4. (si PUBLIC_URL est défini) GET <PUBLIC_URL>/api/health depuis l'extérieur
+merge sur main → tests (3 jobs) → job images (runner ARM natif) :
+  ghcr.io/rxdy/abyss-api:latest et ghcr.io/rxdy/abyss-frontend:latest (+ tag <sha>)
+→ watchtower, sur le Pi, voit la nouvelle image (≤ 5 min) et relance le conteneur
+→ l'API applique les migrations à son démarrage (prisma migrate deploy)
 ```
 
-Un seul déploiement à la fois ; deux merges rapprochés se suivent. Pas de retour arrière
-automatique (le schéma a pu avancer) : en cas d'échec, corriger et remerger, ou restaurer la
-sauvegarde du déploiement (`backups/` sur le serveur, 14 dernières gardées). Pour redéployer à la
-main sur le serveur : `make deploy`.
+**Rien n'est jamais construit sur le Pi** : un `npm install` complet y fait monter la charge au
+point de gêner les autres apps. La CI ne se connecte pas au serveur non plus — pas de SSH, pas de
+secret de déploiement : c'est le Pi qui va chercher les images publiques, comme pour ses autres apps.
 
-### Mise en place (une seule fois)
+Chaque conteneur a une limite de mémoire (API 256 Mo, base 256 Mo, front 64 Mo). La base est
+sauvegardée chaque nuit (`scripts/backup.sh`, cron, 14 sauvegardes gardées dans `backups/`) : les
+mises à jour de watchtower ne passent par aucun script, c'est cette sauvegarde qui les couvre.
 
-**1. Tailscale** — dans la console d'administration :
-
-- *Access controls* : déclarer le tag et autoriser le SSH de la CI vers meliodas, rien d'autre :
-  ```jsonc
-  "tagOwners": { "tag:ci": ["autogroup:admin"] },
-  "hosts":     { "meliodas": "100.x.y.z" },   // IP Tailscale de meliodas (tailscale ip -4)
-  "grants": [
-    { "src": ["tag:ci"], "dst": ["meliodas"], "ip": ["tcp:22"] }
-  ]
-  ```
-  La CI n'atteint que le port SSH de meliodas — aucune autre machine du tailnet.
-- *Settings → OAuth clients* : créer un client avec le scope **`auth_keys` (écriture)**, restreint
-  au tag `tag:ci` → noter l'ID et le secret.
-
-**2. meliodas** — Docker (+ plugin compose), `make` et `git` installés, Traefik déjà en place
-(voir `docker-compose.prod.yml`) :
+À la main, sur le serveur, dans `~/abyss` :
 
 ```bash
-sudo useradd -m -s /bin/bash -G docker deploy        # utilisateur dédié au déploiement
-sudo mkdir -p /srv/abyss2 && sudo chown deploy: /srv/abyss2
-sudo -iu deploy
-git clone https://github.com/Rxdy/abyss2.git /srv/abyss2
-cp /srv/abyss2/.env.example /srv/abyss2/.env && chmod 600 /srv/abyss2/.env
-# → remplir .env : secrets de PRODUCTION (DB_PASSWORD, JWT_SECRET, MASTER_SECRET générés pour
-#   l'occasion — jamais ceux du dev), DOMAIN, TRAEFIK_*, SMTP_*
-ssh-keygen -t ed25519 -N '' -C github-deploy -f ~/.ssh/github_deploy
-cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys   # la CI se connecte avec cette clé
-cat ~/.ssh/github_deploy                                  # → secret DEPLOY_SSH_KEY, puis :
-rm ~/.ssh/github_deploy
+make deploy    # sauvegarde → pull des images → relance → attente de santé (premier déploiement,
+               # changement de docker-compose*.yml ou de .env, ou pour ne pas attendre watchtower)
+make backup    # sauvegarde immédiate
 ```
 
-⚠️ `MASTER_SECRET` chiffre les données en base : le perdre ou le changer rend tout illisible.
-Le sauvegarder hors du serveur (gestionnaire de mots de passe).
+Pas de retour arrière automatique (le schéma a pu avancer) : en cas d'échec, corriger et remerger,
+ou restaurer une sauvegarde de `backups/`. Pour revenir à une version précise : remplacer `latest`
+par un `<sha>` dans `docker-compose.prod.yml` sur le serveur, puis `make deploy`.
 
-**3. GitHub** — *Settings → Environments → New environment* `production` (option : *Required
-reviewers* pour valider chaque mise en ligne), puis dans cet environnement :
+### Mise en place (déjà faite — pour mémoire)
 
-| Type | Nom | Valeur |
-|------|-----|--------|
-| Secret | `TS_OAUTH_CLIENT_ID` | ID du client OAuth Tailscale |
-| Secret | `TS_OAUTH_SECRET` | secret du client OAuth Tailscale |
-| Secret | `DEPLOY_SSH_KEY` | clé privée générée à l'étape 2 |
-| Secret | `DEPLOY_KNOWN_HOSTS` | empreinte du serveur : `ssh-keyscan meliodas` lancé depuis une machine du tailnet |
-| Variable | `DEPLOY_HOST` | `meliodas` (défaut) |
-| Variable | `DEPLOY_USER` | `deploy` (défaut) |
-| Variable | `DEPLOY_PATH` | `/srv/abyss2` (défaut) |
-| Variable | `PUBLIC_URL` | optionnel, ex. `https://abyss2.mondomaine.fr` — vérification finale depuis l'extérieur |
-
-**4. Premier déploiement** : lancer `make deploy` une fois sur meliodas (en tant que `deploy`) pour
-vérifier `.env` et Traefik ; ensuite, chaque merge sur `main` s'en charge.
+1. **Images publiques sur GHCR** : watchtower n'a pas d'identifiants. Après la première publication,
+   *github.com/users/Rxdy/packages* → `abyss-api` puis `abyss-frontend` → *Package settings* →
+   *Change visibility* → **Public**.
+2. **Sur meliodas**, dans `~/abyss` (clone du dépôt) : `.env` de production (`chmod 600`) avec des
+   secrets générés pour l'occasion — jamais ceux du dev — et :
+   ```
+   DOMAIN=abyss.rxdy.fr
+   TRAEFIK_NETWORK=web
+   TRAEFIK_ENTRYPOINT=websecure
+   TRAEFIK_CERT_RESOLVER=leresolver
+   ```
+   ⚠️ `MASTER_SECRET` chiffre les données en base : le perdre ou le changer rend tout illisible.
+   Le sauvegarder hors du serveur (gestionnaire de mots de passe).
+3. **Sauvegarde nocturne** (`crontab -e`) :
+   ```
+   30 3 * * * cd ~/abyss && ./scripts/backup.sh >> backups/backup.log 2>&1
+   ```
+4. **Premier déploiement** : `make deploy`.
 
 > Une fois la production en service, **les migrations déjà appliquées ne se modifient plus** :
 > tout changement de schéma passe par une nouvelle migration (`npx prisma migrate dev --name …`).

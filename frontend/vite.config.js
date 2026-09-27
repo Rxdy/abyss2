@@ -14,8 +14,8 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png'],
       manifest: {
         id: '/',
-        name: 'Abyss2 — suivi de dépenses',
-        short_name: 'Abyss2',
+        name: 'Abyss — suivi de dépenses',
+        short_name: 'Abyss',
         description: 'Suivi de dépenses personnelles à saisie manuelle.',
         lang: 'fr',
         theme_color: '#0b0b17',

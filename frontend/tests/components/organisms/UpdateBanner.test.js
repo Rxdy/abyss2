@@ -29,7 +29,7 @@ describe('UpdateBanner', () => {
     callbacks.onNeedRefresh()
     await w.vm.$nextTick()
 
-    expect(w.text()).toContain('Une nouvelle version d\'Abyss2 est disponible.')
+    expect(w.text()).toContain('Une nouvelle version d\'Abyss est disponible.')
   })
 
   it('est annoncée poliment (status), pas comme une alerte qui interrompt', async () => {

@@ -1,4 +1,4 @@
-.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh deploy user seed test test-front test-back test-db test-coverage pwa-build
+.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh deploy backup user seed test test-front test-back test-db test-coverage pwa-build
 
 # Variables
 COMPOSE := docker compose
@@ -16,9 +16,10 @@ help:
 	@echo "  make setup           - Create .env file (with generated secrets)"
 	@echo "  make up              - Start all services (reachable from this machine only)"
 	@echo "  make up-lan          - Start all services open to the local network (phone testing)"
-	@echo "  make up-prod         - Production: build + start behind Traefik (needs DOMAIN in .env)"
+	@echo "  make up-prod         - Production: pull GHCR images + start behind Traefik (no build)"
 	@echo "  make down-prod       - Stop the production stack"
-	@echo "  make deploy          - On the server: backup DB, rebuild prod stack, wait until healthy"
+	@echo "  make deploy          - On the server: backup DB, pull images, restart, wait until healthy"
+	@echo "  make backup          - On the server: dump the production DB into backups/ (14 kept)"
 	@echo "  make down            - Stop all services"
 	@echo "  make build           - Build all Docker images"
 	@echo "  make restart         - Restart all services"
@@ -74,26 +75,30 @@ up-lan:
 		$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d; \
 	echo "✓ Front : http://$$IP:5174   ·   API : http://$$IP:3002"
 
-# Pile de production : front buildé (nginx), API sans watcher ni volumes, les deux
-# derrière Traefik (voir docker-compose.prod.yml et sa notice). Aucun port publié sur l'hôte.
+# Pile de production : images publiées sur GHCR par la CI (front nginx, API sans watcher), derrière
+# Traefik (voir docker-compose.prod.yml et sa notice). Aucun port publié sur l'hôte, et RIEN n'est
+# construit sur le serveur : le Pi qui l'héberge sert d'autres apps et n'a pas la marge d'un build.
 PROD_COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml --env-file $(ENV_FILE)
 
-build-prod:
-	@$(PROD_COMPOSE) build
-
-up-prod: build-prod
-	@echo "🚀 Launching Abyss2 (production, behind Traefik)..."
-	@$(PROD_COMPOSE) up -d
+up-prod:
+	@echo "🚀 Launching Abyss (production, behind Traefik)..."
+	@$(PROD_COMPOSE) pull --quiet api frontend
+	@$(PROD_COMPOSE) up -d --no-build
 	@DOMAIN=$$(grep '^DOMAIN=' $(ENV_FILE) | cut -d= -f2); \
 		echo "✓ Déployé — vérifiez le routage sur https://$$DOMAIN"
 
 down-prod:
 	@$(PROD_COMPOSE) down
 
-# Sur le serveur de production : sauvegarde, build + relance, attente de santé (scripts/deploy.sh).
-# La CI l'appelle après chaque merge sur main ; utilisable à la main pour redéployer.
+# Sur le serveur de production : sauvegarde, images + relance, attente de santé (scripts/deploy.sh).
+# Watchtower installe déjà chaque nouvelle image publiée ; ceci sert au premier déploiement, après un
+# changement de docker-compose*.yml ou de .env, ou pour ne pas attendre watchtower.
 deploy:
 	@./scripts/deploy.sh
+
+# Sauvegarde de la base de production (scripts/backup.sh) — lancée aussi chaque nuit par cron.
+backup:
+	@./scripts/backup.sh
 
 down:
 	@echo "🛑 Stopping Abyss2 services..."

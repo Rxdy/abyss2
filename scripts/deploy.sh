@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 #
-# Déploie la version présente dans ce dossier sur le serveur de production (meliodas).
+# (Re)déploie Abyss sur le serveur de production (meliodas), à la main.
 #
 #   ./scripts/deploy.sh          (ou : make deploy)
 #
-# Lancé par la CI après chaque merge sur main (voir .github/workflows/ci.yml, job « deploy »),
-# une fois le dépôt placé sur le commit testé ; lançable aussi à la main sur le serveur.
+# Le déploiement courant n'a pas besoin de ce script : après chaque merge sur main, la CI publie
+# les images sur GHCR (job « images ») et watchtower, déjà en place sur le Pi, les installe dans
+# les 5 minutes. Ce script sert au premier déploiement, après un changement de docker-compose*.yml
+# ou de .env, ou pour forcer une mise à jour sans attendre :
 #
-#   1. sauvegarde la base (pg_dump compressé, 14 dernières gardées dans backups/) ;
-#   2. reconstruit et relance la pile de production (make up-prod) — l'API applique les
-#      migrations à son démarrage (prisma migrate deploy, voir docker-compose.prod.yml) ;
+#   1. sauvegarde la base (scripts/backup.sh) ;
+#   2. télécharge les images publiées et relance la pile (make up-prod) — RIEN n'est construit sur
+#      le serveur ; l'API applique les migrations à son démarrage (prisma migrate deploy) ;
 #   3. attend que l'API et le front répondent, sinon échoue en affichant leurs logs.
 #
 # Pas de retour arrière automatique : les migrations ont pu avancer le schéma, et une ancienne
@@ -20,36 +22,20 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-BACKUP_DIR=backups
-BACKUPS_KEPT=14
-HEALTH_TIMEOUT=120 # secondes
+HEALTH_TIMEOUT=180 # secondes
 
 step() { printf '\n▶ %s\n' "$*"; }
 fail() { printf '\n✗ %s\n' "$*" >&2; exit 1; }
 
-[ -f .env ] || fail ".env absent dans $(pwd) — à créer une fois sur le serveur (voir README, « Déploiement »)."
+[ -f .env ] || fail ".env absent dans $(pwd) — à créer une fois sur le serveur (voir README, « Déploiement continu »)."
 grep -q '^DOMAIN=' .env || fail "DOMAIN manquant dans .env (utilisé par Traefik pour router le domaine)."
 
-step "Version $(git rev-parse --short HEAD) — $(git log -1 --format=%s)"
-
 # ── 1. Sauvegarde ────────────────────────────────────────────
-# Seulement si la base tourne déjà (premier déploiement : rien à sauvegarder). Les identifiants
-# sont lus DANS le conteneur, comme PostgreSQL les connaît : pas de .env à analyser ici.
-if docker ps --format '{{.Names}}' | grep -qx abyss2_postgres; then
-  step "Sauvegarde de la base"
-  mkdir -p "$BACKUP_DIR"
-  backup="$BACKUP_DIR/abyss2-$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD).sql.gz"
-  docker exec abyss2_postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "$backup"
-  [ -s "$backup" ] || fail "sauvegarde vide ($backup) — déploiement interrompu, rien n'a été modifié."
-  echo "  $backup ($(du -h "$backup" | cut -f1))"
-  # Garde les plus récentes seulement (noms horodatés : l'ordre alphabétique est chronologique).
-  find "$BACKUP_DIR" -maxdepth 1 -name 'abyss2-*.sql.gz' | sort -r | tail -n +$((BACKUPS_KEPT + 1)) | xargs -r rm --
-else
-  step "Base pas encore démarrée — premier déploiement, pas de sauvegarde"
-fi
+step "Sauvegarde de la base"
+./scripts/backup.sh || fail "sauvegarde impossible — déploiement interrompu, rien n'a été modifié."
 
-# ── 2. Build + relance ───────────────────────────────────────
-step "Build et relance de la pile de production"
+# ── 2. Images + relance ──────────────────────────────────────
+step "Téléchargement des images et relance"
 make --no-print-directory up-prod
 
 # ── 3. Santé ─────────────────────────────────────────────────
@@ -70,7 +56,9 @@ until healthy; do
   sleep 3
 done
 
-# Images des versions précédentes, devenues orphelines après le rebuild.
+# Images des versions précédentes, devenues orphelines après la mise à jour.
 docker image prune -f >/dev/null
 
-printf '\n✓ Déployé : %s sur https://%s\n' "$(git rev-parse --short HEAD)" "$(grep '^DOMAIN=' .env | cut -d= -f2)"
+printf '\n✓ Déployé : %s sur https://%s\n' \
+  "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' abyss2_api 2>/dev/null | cut -c1-7)" \
+  "$(grep '^DOMAIN=' .env | cut -d= -f2)"
