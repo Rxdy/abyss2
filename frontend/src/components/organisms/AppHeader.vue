@@ -47,14 +47,18 @@ async function logout() {
 </template>
 
 <style scoped>
+/* La PWA iOS dessine sous la barre d'état (heure, batterie) : l'en-tête la réserve en haut, sur
+   son propre fond. env(safe-area-inset-top) vaut 0 partout ailleurs. */
 .app-header {
-  height: var(--header-height);
+  height: calc(var(--header-height) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0 var(--content-padding);
+  padding-left: var(--content-padding);
+  padding-right: var(--content-padding);
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
 }

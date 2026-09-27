@@ -14,6 +14,8 @@ html {
   scroll-behavior: smooth;
   height: 100%;
   overflow: hidden;
+  /* Application, pas document : un double tap ne zoome pas (le pincement est bloqué dans main.js). */
+  touch-action: manipulation;
 }
 
 body {
@@ -28,8 +30,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Fixé sur l'écran entier plutôt qu'en `height: 100%` : dans la PWA iOS (barre d'état translucide,
+   viewport-fit=cover), les hauteurs en % ou en vh ne comptent pas la zone de la barre d'état et
+   laissaient une bande vide en bas de l'écran. */
 #app {
-  height: 100%;
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
