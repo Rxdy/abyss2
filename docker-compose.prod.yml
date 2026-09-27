@@ -75,7 +75,9 @@ services:
       - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
       - traefik.http.services.abyss2-frontend.loadbalancer.server.port=80
       - traefik.http.routers.abyss2-frontend.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.abyss2-frontend.priority=1
+      # 2, pas 1 : le fallback de l'infra (HostRegexp(`^.+$`), « Parcelle vacante ») est en priorité 1 —
+      # à égalité, Traefik choisit au hasard et servait sa page à la place de l'app.
+      - traefik.http.routers.abyss2-frontend.priority=2
       - traefik.http.routers.abyss2-frontend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.abyss2-frontend.tls=true
       - traefik.http.routers.abyss2-frontend.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
