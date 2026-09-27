@@ -49,10 +49,22 @@ ou un `make clean`). Pour remplir le compte de démo :
 make seed
 ```
 
-Le seed passe par l'API (chiffrement, validations et génération des charges fixes
-sont ceux de l'app) : catégories et sous-catégories, ~110 dépenses courantes, revenus
-ponctuels, une transaction sans catégorie, et 12 charges fixes dont une terminée,
-une en pause et une au 29 du mois. Rejouable à volonté : le compte est supprimé puis
+Pour repartir d'une base **vierge** et tout remettre en place d'un coup (reset,
+migrations, comptes de test, compte de démo rempli) :
+
+```bash
+make db-fresh   # ⚠️ efface toutes les données locales
+```
+
+Le seed passe par l'API (chiffrement, validations, génération des charges fixes et
+des notifications sont ceux de l'app) : catégories et sous-catégories, 3 enveloppes
+(dont une dépassée ce mois-ci), ~110 dépenses courantes, revenus ponctuels, une
+transaction sans catégorie, 12 charges fixes dont une terminée, une en pause et une
+au 29 du mois, et une réparation qui fait passer le solde sous zéro avant le
+remboursement de l'assurance. Les notifications (enveloppe dépassée, solde négatif,
+dépenses non catégorisées) ne sont jamais insérées : elles naissent de ces
+opérations, et le seed échoue si l'une d'elles manque — `make db-fresh` sert donc
+aussi de test de fumée de toute la chaîne sur une base neuve. Rejouable à volonté : le compte est supprimé puis
 recréé. Les dates suivent le jour d'exécution (toujours 6 mois glissants), les
 montants et la forme des données sont déterministes
 ([backend/scripts/demo-data.ts](backend/scripts/demo-data.ts)).

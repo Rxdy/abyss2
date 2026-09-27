@@ -4,7 +4,8 @@
  * Génère 6 mois d'historique (les 5 mois précédents + le mois courant jusqu'à
  * aujourd'hui) : charges fixes, dépenses courantes, quelques revenus
  * ponctuels, une transaction sans catégorie… de quoi remplir chaque écran
- * (accueil, transactions, catégories, charges fixes, statistiques).
+ * (accueil, transactions, catégories, enveloppes, charges fixes, statistiques,
+ * notifications).
  *
  * Déterministe : un PRNG à graine fixe donne toujours la même forme de
  * données ; seules les dates suivent le jour d'exécution.
@@ -39,11 +40,31 @@ export interface DemoRecurring {
   pausedAfterSeed: boolean
 }
 
+export interface DemoEnvelope {
+  name: string
+  /** Plafond mensuel, en centimes. */
+  budget: number
+  /** Noms des catégories rattachées — une dépense ne compte que dans la catégorie exacte. */
+  categories: string[]
+}
+
 export interface DemoData {
   categories: DemoCategory[]
+  envelopes: DemoEnvelope[]
   transactions: DemoTransaction[]
   recurring: DemoRecurring[]
 }
+
+/**
+ * Enveloppes du compte de démo : une large (Vie quotidienne), une confortable (Loisirs) et une
+ * dépassée ce mois-ci (Déplacements, par la révision de la voiture — voir buildDemoData), qui
+ * déclenche une vraie notification « enveloppe dépassée » pendant le seed.
+ */
+export const DEMO_ENVELOPES: DemoEnvelope[] = [
+  { name: 'Vie quotidienne', budget: 70000, categories: ['Courses', 'Restaurants'] },
+  { name: 'Déplacements',    budget: 15000, categories: ['Transport', 'Carburant', 'Transports en commun'] },
+  { name: 'Loisirs',         budget: 25000, categories: ['Sorties', 'Sport', 'Voyages'] },
+]
 
 /** Nombre de mois d'historique, mois courant compris. */
 export const HISTORY_MONTHS = 6
@@ -173,6 +194,9 @@ export function buildDemoData(now: Date = new Date()): DemoData {
   add({ title: 'Week-end à Lyon (train + hôtel)', amount: 24600, date: isoDate(year, month - 2, 6), type: 'expense', category: 'Voyages', note: 'Réservé 3 semaines avant' })
   add({ title: 'Retrait distributeur',       amount: 4000,  date: isoDate(year, month - 1, 12), type: 'expense', category: null })
   add({ title: 'Remboursement ami',          amount: 2500,  date: isoDate(year, month - 1, 25), type: 'income',  category: null })
+  // À elle seule au-dessus du plafond de « Déplacements » (150 €) : le dépassement du mois courant
+  // ne dépend ni du jour d'exécution ni du tirage aléatoire.
+  add({ title: 'Révision voiture',           amount: 22000, date: isoDate(year, month, Math.min(today, 4)), type: 'expense', category: 'Transport', note: 'Vidange + plaquettes' })
 
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 
@@ -197,5 +221,5 @@ export function buildDemoData(now: Date = new Date()): DemoData {
     },
   )
 
-  return { categories: CATEGORIES, transactions, recurring }
+  return { categories: CATEGORIES, envelopes: DEMO_ENVELOPES, transactions, recurring }
 }
