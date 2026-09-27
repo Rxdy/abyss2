@@ -33,12 +33,14 @@ defineProps({
   align-items: center;
   justify-content: center;
   padding: var(--space-5) var(--content-padding);
+  padding-top: calc(var(--space-5) + env(safe-area-inset-top));
+  padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
   background: var(--color-bg-base);
 }
 
 .auth-page__theme {
   position: absolute;
-  top: var(--space-4);
+  top: calc(var(--space-4) + env(safe-area-inset-top));
   right: var(--content-padding);
 }
 

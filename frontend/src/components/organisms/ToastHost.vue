@@ -28,7 +28,7 @@ const toasts = useToastStore()
   left: var(--space-4);
   right: var(--space-4);
   /* Au-dessus de la barre de navigation basse (mobile / tablette). */
-  bottom: calc(var(--navbar-height) + var(--space-4));
+  bottom: calc(var(--navbar-height) + var(--space-4) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
