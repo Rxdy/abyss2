@@ -1,7 +1,7 @@
 /**
  * Tests d'intégration — base de données réelle
  *
- * Vérifie que le schéma physique (postgres/init.sql) correspond à ce que
+ * Vérifie que le schéma physique (construit par `prisma/migrations`) correspond à ce que
  * Prisma et l'API attendent. Nécessite un PostgreSQL joignable via DATABASE_URL.
  *
  *   docker compose up -d postgres
@@ -25,9 +25,6 @@ function userFixture(suffix: string) {
     emailHash:      fakeHash(suffix),
     emailEncrypted: 'iv:tag:ciphertext',
     passwordHash:   '$2a$12$notarealhashnotarealhashnotarealhashnotarealhashno',
-    authSalt:       'a'.repeat(32),
-    keySalt:        'b'.repeat(32),
-    keyFragment:    'c'.repeat(64),
   }
 }
 
@@ -75,18 +72,33 @@ describe('table dbo.users', () => {
     const columns = Object.fromEntries(rows.map((r) => [r.column_name, r]))
 
     expect(Object.keys(columns).sort()).toEqual([
-      'auth_salt', 'created_at', 'email_encrypted', 'email_hash',
-      'id', 'key_fragment', 'key_salt', 'password_hash', 'updated_at',
+      'created_at', 'currency', 'email_encrypted', 'email_hash',
+      'id', 'last_uncategorized_digest_at',
+      'notify_envelope_overspend', 'notify_negative_balance', 'notify_uncategorized_digest',
+      'password_hash', 'session_mode', 'token_version', 'updated_at',
     ])
 
     expect(columns.id.data_type).toBe('uuid')
+    expect(columns.token_version.data_type).toBe('integer')
+    expect(columns.token_version.is_nullable).toBe('NO')
+    expect(columns.currency.data_type).toBe('character varying')
+    expect(columns.currency.is_nullable).toBe('NO')
+    expect(columns.session_mode.is_nullable).toBe('NO')
     expect(columns.email_hash.data_type).toBe('character varying')
     expect(columns.email_encrypted.data_type).toBe('text')
     expect(columns.password_hash.data_type).toBe('text')
     expect(columns.created_at.data_type).toBe('timestamp with time zone')
+    // NULL tant qu'aucun digest « dépenses non catégorisées » n'a été émis (utils/notifications.ts).
+    expect(columns.last_uncategorized_digest_at.data_type).toBe('timestamp with time zone')
+    expect(columns.last_uncategorized_digest_at.is_nullable).toBe('YES')
+    // Réglages des notifications (page Profil) : tous actifs par défaut, jamais indéterminés.
+    for (const name of ['notify_envelope_overspend', 'notify_negative_balance', 'notify_uncategorized_digest']) {
+      expect(columns[name].data_type, name).toBe('boolean')
+      expect(columns[name].is_nullable, name).toBe('NO')
+    }
 
     // Aucune colonne obligatoire ne doit être nullable
-    for (const name of ['email_hash', 'email_encrypted', 'password_hash', 'auth_salt', 'key_salt', 'key_fragment']) {
+    for (const name of ['email_hash', 'email_encrypted', 'password_hash']) {
       expect(columns[name].is_nullable).toBe('NO')
     }
   })
