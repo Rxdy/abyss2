@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { CHECK_EVERY_MS, registerPwaUpdates, resetPwaUpdate, usePwaUpdate } from '@/composables/usePwaUpdate.js'
+import { AUTO_APPLY_WINDOW_MS, CHECK_EVERY_MS, registerPwaUpdates, resetPwaUpdate, usePwaUpdate } from '@/composables/usePwaUpdate.js'
 
 /** `registerSW` factice : garde les rappels du composable et renvoie `updateSW`. */
 function fakeRegisterSW() {
@@ -18,6 +18,47 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
+/** Une version qui arrive en cours d'utilisation, bien après l'ouverture de l'app. */
+const laterInUse = () => vi.advanceTimersByTime(AUTO_APPLY_WINDOW_MS)
+
+describe('usePwaUpdate — installation d\'office à l\'ouverture', () => {
+  it('une version trouvée juste après l\'ouverture est activée aussitôt, sans bandeau', () => {
+    const { register, updateSW } = fakeRegisterSW()
+    registerPwaUpdates(register)
+
+    vi.advanceTimersByTime(AUTO_APPLY_WINDOW_MS - 1)
+    register.callbacks.onNeedRefresh()
+
+    expect(updateSW).toHaveBeenCalledWith(true)
+    expect(usePwaUpdate().visible.value).toBe(false)
+  })
+
+  it('de même juste après être revenu dans l\'app (remise au premier plan)', () => {
+    const { register, updateSW } = fakeRegisterSW()
+    registerPwaUpdates(register)
+    register.callbacks.onRegisteredSW('/sw.js', { update: vi.fn().mockResolvedValue(undefined) })
+    laterInUse()
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    register.callbacks.onNeedRefresh()
+
+    expect(updateSW).toHaveBeenCalledWith(true)
+    expect(usePwaUpdate().visible.value).toBe(false)
+  })
+
+  it('en cours d\'utilisation, rien n\'est activé sans l\'accord de l\'utilisateur', () => {
+    const { register, updateSW } = fakeRegisterSW()
+    registerPwaUpdates(register)
+    laterInUse()
+
+    register.callbacks.onNeedRefresh()
+
+    expect(updateSW).not.toHaveBeenCalled()
+    expect(usePwaUpdate().visible.value).toBe(true)
+  })
+})
+
 describe('usePwaUpdate — annonce', () => {
   it('rien à annoncer tant que le service worker ne dit rien', () => {
     const { register } = fakeRegisterSW()
@@ -29,6 +70,7 @@ describe('usePwaUpdate — annonce', () => {
   it('une nouvelle version prête devient visible', () => {
     const { register } = fakeRegisterSW()
     registerPwaUpdates(register)
+    laterInUse()
 
     register.callbacks.onNeedRefresh()
 
@@ -39,6 +81,7 @@ describe('usePwaUpdate — annonce', () => {
   it('« Plus tard » masque l\'invitation', () => {
     const { register } = fakeRegisterSW()
     registerPwaUpdates(register)
+    laterInUse()
     register.callbacks.onNeedRefresh()
 
     usePwaUpdate().dismiss()
@@ -50,6 +93,7 @@ describe('usePwaUpdate — annonce', () => {
   it('une version encore plus récente après un « plus tard » réaffiche l\'invitation', () => {
     const { register } = fakeRegisterSW()
     registerPwaUpdates(register)
+    laterInUse()
     register.callbacks.onNeedRefresh()
     usePwaUpdate().dismiss()
 
