@@ -18,7 +18,7 @@ import type { TransactionType } from '../types.js'
 import { currentMonthKey } from '../utils/date.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { runDueRecurring } from '../utils/recurring.js'
-import { checkEnvelopeOverspend } from '../utils/notifications.js'
+import { notifyAfterChange, type TransactionImpact } from '../utils/notifications.js'
 
 const TITLE_USAGE  = 'transaction-title'
 const AMOUNT_USAGE = 'transaction-amount'
@@ -50,6 +50,16 @@ const transactionSchema = {
 const errorSchema = {
   type: 'object',
   properties: { error: { type: 'string' }, code: { type: 'string' } },
+}
+
+/** Ce qu'une ligne pèse sur les seuils des notifications (solde, enveloppes). */
+function impactOf(row: { categoryId?: string | null; amountEncrypted: string; date: Date; type: string }): TransactionImpact {
+  return {
+    categoryId: row.categoryId ?? null,
+    amount:     parseInt(decryptValue(row.amountEncrypted, AMOUNT_USAGE), 10),
+    date:       row.date,
+    type:       row.type,
+  }
 }
 
 /** yyyy-mm-dd, sans dépendre du fuseau local. */
@@ -313,9 +323,7 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
       include: { category: true },
     })
 
-    if (type === 'expense') {
-      await checkEnvelopeOverspend(fastify.prisma, req.user.userId, categoryId, amount)
-    }
+    await notifyAfterChange(fastify.prisma, req.user.userId, { added: [impactOf(transaction)] })
 
     return reply.code(201).send(toApi(transaction))
   })
@@ -348,7 +356,7 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const existing = await fastify.prisma.transaction.findFirst({
       where:  { id: req.params.id, userId: req.user.userId },
-      select: { id: true },
+      select: { id: true, categoryId: true, amountEncrypted: true, date: true, type: true },
     })
 
     if (!existing) {
@@ -386,6 +394,11 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
       throw err
     }
 
+    // Libellé ou note seuls ne touchent ni au solde ni aux enveloppes.
+    if ([amount, date, type, categoryId].some((field) => field !== undefined)) {
+      await notifyAfterChange(fastify.prisma, req.user.userId, { removed: [impactOf(existing)], added: [impactOf(transaction)] })
+    }
+
     return reply.code(200).send(toApi(transaction))
   })
 
@@ -410,7 +423,7 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const existing = await fastify.prisma.transaction.findFirst({
       where:  { id: req.params.id, userId: req.user.userId },
-      select: { id: true },
+      select: { id: true, categoryId: true, amountEncrypted: true, date: true, type: true },
     })
 
     if (!existing) {
@@ -418,6 +431,9 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
     }
 
     await fastify.prisma.transaction.delete({ where: { id: req.params.id } })
+
+    // Supprimer un revenu peut faire passer le solde sous zéro.
+    await notifyAfterChange(fastify.prisma, req.user.userId, { removed: [impactOf(existing)] })
 
     return reply.code(200).send({ id: req.params.id, deleted: true })
   })

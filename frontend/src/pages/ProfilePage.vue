@@ -120,7 +120,7 @@ onMounted(loadProfile)
         <BaseIcon name="sun" :size="18" />
         <div class="profile__setting-body">
           <BaseText size="sm" weight="medium" color="primary">Préférences</BaseText>
-          <BaseText size="xs" color="muted">Thème, devise, session</BaseText>
+          <BaseText size="xs" color="muted">Thème, devise, session, notifications</BaseText>
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>

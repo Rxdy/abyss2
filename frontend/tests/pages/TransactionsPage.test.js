@@ -130,6 +130,18 @@ describe('TransactionsPage — raccourci « Ajouter une transaction »', () => {
     expect(router.currentRoute.value.query).toEqual({})
   })
 
+  it('applique les filtres portés par l\'URL (lien d\'une notification), puis nettoie l\'URL', async () => {
+    const fetchMock = mockApi({ total: 3 })
+    await router.push('/transactions?category=none&type=expense')
+    mount(TransactionsPage)
+    await flushPromises()
+
+    const list = fetchMock.mock.calls.map(([url]) => new URL(url)).find((url) => url.pathname === '/api/transactions')
+    expect(list.searchParams.get('categoryId')).toBe('none')
+    expect(list.searchParams.get('type')).toBe('expense')
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
   it('n\'ouvre rien sans ?new=1', async () => {
     mockApi({ total: 12 })
     await router.push('/transactions')

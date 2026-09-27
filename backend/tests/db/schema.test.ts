@@ -73,7 +73,9 @@ describe('table dbo.users', () => {
 
     expect(Object.keys(columns).sort()).toEqual([
       'created_at', 'currency', 'email_encrypted', 'email_hash',
-      'id', 'password_hash', 'session_mode', 'token_version', 'updated_at',
+      'id', 'last_uncategorized_digest_at',
+      'notify_envelope_overspend', 'notify_negative_balance', 'notify_uncategorized_digest',
+      'password_hash', 'session_mode', 'token_version', 'updated_at',
     ])
 
     expect(columns.id.data_type).toBe('uuid')
@@ -86,6 +88,14 @@ describe('table dbo.users', () => {
     expect(columns.email_encrypted.data_type).toBe('text')
     expect(columns.password_hash.data_type).toBe('text')
     expect(columns.created_at.data_type).toBe('timestamp with time zone')
+    // NULL tant qu'aucun digest « dépenses non catégorisées » n'a été émis (utils/notifications.ts).
+    expect(columns.last_uncategorized_digest_at.data_type).toBe('timestamp with time zone')
+    expect(columns.last_uncategorized_digest_at.is_nullable).toBe('YES')
+    // Réglages des notifications (page Profil) : tous actifs par défaut, jamais indéterminés.
+    for (const name of ['notify_envelope_overspend', 'notify_negative_balance', 'notify_uncategorized_digest']) {
+      expect(columns[name].data_type, name).toBe('boolean')
+      expect(columns[name].is_nullable, name).toBe('NO')
+    }
 
     // Aucune colonne obligatoire ne doit être nullable
     for (const name of ['email_hash', 'email_encrypted', 'password_hash']) {

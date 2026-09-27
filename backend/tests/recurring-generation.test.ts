@@ -3,8 +3,17 @@
  * de rattrapages simultanés (l'unicité (charge fixe, date) est portée par la base).
  */
 
-import { describe, it, expect } from 'vitest'
-import { runDueRecurring } from '../src/utils/recurring.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Les seuils (solde, enveloppes) sont testés dans utils-notifications.test.ts : ici on vérifie
+// seulement ce que le rattrapage leur transmet. Le montant du modèle est déchiffré pour ça.
+vi.mock('../src/utils/notifications.js', () => ({ notifyAfterChange: vi.fn() }))
+vi.mock('../src/utils/crypto.js', () => ({ decryptValue: vi.fn(() => '1500') }))
+
+const { runDueRecurring } = await import('../src/utils/recurring.js')
+const { notifyAfterChange } = await import('../src/utils/notifications.js')
+
+beforeEach(() => { vi.mocked(notifyAfterChange).mockClear() })
 
 const USER_ID = 'user-1'
 
@@ -128,5 +137,45 @@ describe('runDueRecurring — rattrapages simultanés', () => {
 
     expect(await runDueRecurring(prisma, USER_ID, { now: NOW })).toBe(3)
     expect(rows.get('rec-1|2026-02-05')).toEqual({ pre: 'existante' })
+  })
+
+  it('un seul des appels simultanés transmet les échéances aux notifications', async () => {
+    const { prisma } = fakePrisma([template()])
+
+    await Promise.all(Array.from({ length: 10 }, () => runDueRecurring(prisma, USER_ID, { now: NOW })))
+
+    expect(notifyAfterChange).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runDueRecurring — notifications', () => {
+  it('transmet chaque échéance créée (montant déchiffré, date, catégorie, type)', async () => {
+    const { prisma } = fakePrisma([template({ lastGeneratedMonth: '2026-02' })])
+
+    await runDueRecurring(prisma, USER_ID, { now: NOW })
+
+    expect(notifyAfterChange).toHaveBeenCalledWith(prisma, USER_ID, {
+      added: [
+        { categoryId: 'cat-1', amount: 1500, date: new Date('2026-03-05'), type: 'expense' },
+        { categoryId: 'cat-1', amount: 1500, date: new Date('2026-04-05'), type: 'expense' },
+      ],
+    }, NOW)
+  })
+
+  it('regroupe toutes les charges fixes en un seul appel', async () => {
+    const { prisma } = fakePrisma([template({ lastGeneratedMonth: '2026-03' }), template({ id: 'rec-2', lastGeneratedMonth: '2026-03' })])
+
+    await runDueRecurring(prisma, USER_ID, { now: NOW })
+
+    expect(notifyAfterChange).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(notifyAfterChange).mock.calls[0][2].added).toHaveLength(2)
+  })
+
+  it('rien de créé : ne notifie pas', async () => {
+    const { prisma } = fakePrisma([template({ lastGeneratedMonth: '2026-04' })])
+
+    await runDueRecurring(prisma, USER_ID, { now: NOW })
+
+    expect(notifyAfterChange).not.toHaveBeenCalled()
   })
 })

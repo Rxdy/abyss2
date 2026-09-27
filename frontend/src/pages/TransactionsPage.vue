@@ -51,10 +51,17 @@ function onSaved() {
 
 onMounted(() => {
   // Raccourci de l'app installée (« Ajouter une transaction ») : /transactions?new=1
-  if ('new' in route.query) {
-    openCreate()
-    router.replace({ query: {} })
+  if ('new' in route.query) openCreate()
+
+  // Lien depuis une notification (« dépenses non catégorisées ») : /transactions?category=none&type=expense
+  const category = typeof route.query.category === 'string' ? route.query.category : ''
+  const type     = typeof route.query.type     === 'string' ? route.query.type     : ''
+  if (category || type) {
+    transactions.filters = { type, categoryId: category, from: '', to: '' }
+    transactions.search  = ''
   }
+
+  if (Object.keys(route.query).length) router.replace({ query: {} })
 
   transactions.fetchAll()
   categories.fetchAll().catch(() => {})

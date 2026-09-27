@@ -7,6 +7,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import NotificationsPage from '@/pages/NotificationsPage.vue'
 import { useToastStore } from '@/stores/toast.store.js'
 import { mockApi, calls } from '../stores/_helpers.js'
+import { router } from '../setup.js'
 
 const notif = (id, extra = {}) => ({
   id, type: 'envelope_overspend', title: 'Enveloppe dépassée', message: 'x',
@@ -77,6 +78,54 @@ describe('NotificationsPage — lecture', () => {
     await flushPromises()
 
     expect(calls(fetchMock).some((c) => c.method === 'PUT')).toBe(false)
+  })
+})
+
+describe('NotificationsPage — ouverture', () => {
+  it.each([
+    ['envelope_overspend', '/profile/envelopes'],
+    ['negative_balance', '/'],
+    ['uncategorized_digest', { path: '/transactions', query: { category: 'none', type: 'expense' } }],
+  ])('ouvrir « %s » mène à l\'écran concerné', async (type, target) => {
+    await mountPage([notif('n1', { type, read: true })])
+    const push = vi.spyOn(router, 'push').mockResolvedValue()
+
+    await wrapper.find('.notification__main').trigger('click')
+    await flushPromises()
+
+    expect(push).toHaveBeenCalledWith(target)
+  })
+
+  it('non lue : la marque lue avant de naviguer', async () => {
+    const fetchMock = await mountPage([notif('n1')], (req) => (req.method === 'PUT' ? { body: notif('n1', { read: true }) } : { body: {} }))
+    const push = vi.spyOn(router, 'push').mockResolvedValue()
+
+    await wrapper.find('.notification__main').trigger('click')
+    await flushPromises()
+
+    expect(calls(fetchMock).some((c) => c.method === 'PUT')).toBe(true)
+    expect(push).toHaveBeenCalledWith('/profile/envelopes')
+  })
+})
+
+describe('NotificationsPage — tout marquer comme lu', () => {
+  const readAllButton = () => wrapper.findAll('button').find((b) => b.text() === 'Tout marquer comme lu')
+
+  it('des non lues : le bouton marque tout comme lu', async () => {
+    const fetchMock = await mountPage([notif('n1'), notif('n2')], () => ({ body: { updated: 2 } }))
+
+    await readAllButton().trigger('click')
+    await flushPromises()
+
+    expect(calls(fetchMock).some((c) => c.method === 'POST' && c.path === '/api/notifications/read-all')).toBe(true)
+    expect(wrapper.find('.notification__dot').exists()).toBe(false)
+    expect(readAllButton()).toBeUndefined()
+    expect(useToastStore().items[0].message).toBe('Toutes les notifications sont lues.')
+  })
+
+  it('tout est déjà lu : pas de bouton', async () => {
+    await mountPage([notif('n1', { read: true })])
+    expect(readAllButton()).toBeUndefined()
   })
 })
 

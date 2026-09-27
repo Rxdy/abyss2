@@ -1,10 +1,12 @@
 <script setup>
 /*
- * Préférences : thème (propre à cet appareil), devise et session (enregistrées sur le compte).
+ * Préférences : thème (propre à cet appareil), devise, session et notifications (enregistrées sur
+ * le compte).
  */
 import BaseText from '@/components/atoms/BaseText.vue'
 import ThemeSettings        from '@/components/organisms/ThemeSettings.vue'
 import CurrencySettings     from '@/components/organisms/CurrencySettings.vue'
+import NotificationSettings from '@/components/organisms/NotificationSettings.vue'
 import SessionSettings      from '@/components/organisms/SessionSettings.vue'
 </script>
 
@@ -23,6 +25,7 @@ import SessionSettings      from '@/components/organisms/SessionSettings.vue'
     <ThemeSettings class="preferences__section" />
     <CurrencySettings class="preferences__section" />
     <SessionSettings class="preferences__section" />
+    <NotificationSettings class="preferences__section" />
   </section>
 </template>
 

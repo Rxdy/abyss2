@@ -307,6 +307,70 @@ describe('PUT /api/user/password', () => {
 })
 
 
+describe('/api/user/notification-settings', () => {
+  const auth = () => ({ authorization: `Bearer ${token}` })
+  const columns = (over: Record<string, boolean> = {}) => ({
+    tokenVersion: 0,
+    notifyEnvelopeOverspend: true, notifyNegativeBalance: true, notifyUncategorizedDigest: true,
+    ...over,
+  })
+
+  it('GET 401 sans token', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/user/notification-settings' })
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('GET — renvoie les trois réglages sous leurs noms d\'API', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(columns({ notifyNegativeBalance: false }))
+
+    const res = await app.inject({ method: 'GET', url: '/api/user/notification-settings', headers: auth() })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ envelopeOverspend: true, negativeBalance: false, uncategorizedDigest: true })
+  })
+
+  it('PUT — ne met à jour que les réglages envoyés', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(columns())
+    mockPrisma.user.update.mockResolvedValue(columns({ notifyUncategorizedDigest: false }))
+
+    const res = await app.inject({
+      method: 'PUT', url: '/api/user/notification-settings', headers: auth(),
+      payload: { uncategorizedDigest: false },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ envelopeOverspend: true, negativeBalance: true, uncategorizedDigest: false })
+    expect(mockPrisma.user.update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'uuid-test-user' },
+      data:  { notifyUncategorizedDigest: false },
+    })
+  })
+
+  it.each([
+    ['corps vide', {}],
+    ['valeur non booléenne', { negativeBalance: 'non' }],
+  ])('PUT 400 — %s', async (_, payload) => {
+    mockPrisma.user.findUnique.mockResolvedValue(columns())
+
+    const res = await app.inject({ method: 'PUT', url: '/api/user/notification-settings', headers: auth(), payload })
+
+    expect(res.statusCode).toBe(400)
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('PUT — une clé inconnue n\'atteint jamais la base', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(columns())
+    mockPrisma.user.update.mockResolvedValue(columns())
+
+    await app.inject({
+      method: 'PUT', url: '/api/user/notification-settings', headers: auth(),
+      payload: { negativeBalance: true, tokenVersion: 99 },
+    })
+
+    expect(mockPrisma.user.update.mock.calls[0][0].data).toEqual({ notifyNegativeBalance: true })
+  })
+})
+
 describe('PUT /api/user/preferences', () => {
   const auth = () => ({ authorization: `Bearer ${token}` })
 

@@ -1,18 +1,22 @@
 <script setup>
 /*
  * Cloche du header : mène à /notifications, badge du nombre de non lues.
- * Le compte est rafraîchi au montage (donc à chaque chargement de l'app) —
- * pas de sondage périodique, cohérent avec l'absence de tâche planifiée
- * côté API (voir utils/notifications.ts).
+ * Le compte est rafraîchi au montage (donc à chaque chargement de l'app) et à
+ * chaque changement de page — le rattrapage des charges fixes peut avoir créé
+ * une notification pendant la lecture de la page précédente. Pas de sondage
+ * périodique, cohérent avec l'absence de tâche planifiée côté API (voir
+ * utils/notifications.ts). Les écritures de transactions le rafraîchissent
+ * elles-mêmes (transactions.store).
  */
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BaseIcon   from '@/components/atoms/BaseIcon.vue'
 import BaseText   from '@/components/atoms/BaseText.vue'
 import IconButton from '@/components/atoms/IconButton.vue'
 import { useAuthStore } from '@/stores/auth.store.js'
 import { useNotificationsStore } from '@/stores/notifications.store.js'
 
+const route  = useRoute()
 const router = useRouter()
 const auth   = useAuthStore()
 const notifications = useNotificationsStore()
@@ -20,7 +24,12 @@ const notifications = useNotificationsStore()
 // AppHeader (donc cette cloche) peut se monter brièvement pendant la résolution initiale du
 // routeur, avant la redirection vers /login — un appel authentifié à ce moment-là échoue toujours
 // (401 attendu, mais bruyant en console) : voir App.vue::validateSession, qui se garde pareil.
-onMounted(() => { if (auth.isAuthenticated) notifications.fetchUnreadCount() })
+function refresh() {
+  if (auth.isAuthenticated) notifications.fetchUnreadCount()
+}
+
+onMounted(refresh)
+watch(() => route.path, refresh)
 </script>
 
 <template>

@@ -26,13 +26,14 @@ describe('AccountPage', () => {
 })
 
 describe('PreferencesPage', () => {
-  it('regroupe thème, devise et session', async () => {
+  it('regroupe thème, devise, session et notifications', async () => {
     mockApi(() => ({ body: { envelopeOverspend: true, negativeBalance: true, uncategorizedDigest: true } }))
     const w = mount(PreferencesPage)
     await flushPromises()
 
     expect(w.findComponent({ name: 'ThemeSettings' }).exists()).toBe(true)
     expect(w.findComponent({ name: 'CurrencySettings' }).exists()).toBe(true)
+    expect(w.findComponent({ name: 'NotificationSettings' }).exists()).toBe(true)
     expect(w.findComponent({ name: 'SessionSettings' }).exists()).toBe(true)
   })
 })

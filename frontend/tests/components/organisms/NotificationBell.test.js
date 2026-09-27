@@ -50,6 +50,21 @@ describe('NotificationBell', () => {
     expect(push).toHaveBeenCalledWith('/notifications')
   })
 
+  it('rafraîchit le compte à chaque changement de page', async () => {
+    let count = 1
+    mockApi(() => ({ body: { count } }))
+    await router.push('/')
+    const w = mount(NotificationBell)
+    await flushPromises()
+    expect(w.text()).toContain('1')
+
+    count = 2
+    await router.push('/profile')
+    await flushPromises()
+
+    expect(w.text()).toContain('2')
+  })
+
   it('non authentifié : ne fait aucun appel (évite un 401 pendant la résolution initiale du routeur)', async () => {
     useAuthStore().hasSession = false
     const fetchMock = mockApi(() => ({ body: { count: 5 } }))

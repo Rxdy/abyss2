@@ -278,7 +278,7 @@ describe('contraintes CHECK', () => {
       .toMatch(/chk_users_token_version/)
   })
 
-  it.each(['envelope_overspend', 'uncategorized_digest'])('accepte le type de notification « %s »', async (type) => {
+  it.each(['envelope_overspend', 'uncategorized_digest', 'negative_balance'])('accepte le type de notification « %s »', async (type) => {
     expect(await sqlError(`INSERT INTO dbo.notifications (user_id, type) VALUES ($1::uuid, $2)`, userId, type))
       .toBeNull()
   })

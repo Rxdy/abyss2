@@ -197,6 +197,24 @@ describe('transactions.store — mutations', () => {
   })
 })
 
+describe('transactions.store — notifications', () => {
+  it.each([
+    ['create', (store) => store.create({ title: 'x' })],
+    ['update', (store) => store.update('t1', { amount: 5000 })],
+    ['remove', (store) => store.remove('t1')],
+  ])('%s : rafraîchit le compteur de notifications (un seuil a pu être franchi)', async (_, run) => {
+    const fetchMock = mockFetch((url) => (url.pathname.endsWith('/unread-count') ? { body: { count: 0 } } : { body: tx(1) }))
+    const store = useTransactionsStore()
+    store.items = page(1, 2)
+    store.total = 2
+
+    await run(store)
+    await vi.waitFor(() => {
+      expect(urlsCalled(fetchMock).some((url) => url.pathname === '/api/notifications/unread-count')).toBe(true)
+    })
+  })
+})
+
 describe('transactions.store — recherche', () => {
   const named = (n, title, extra = {}) => ({ ...tx(n), title, ...extra })
 
