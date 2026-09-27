@@ -99,3 +99,57 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # ── Déploiement continu ────────────────────────────────────
+  # Après un merge sur main, et seulement si tous les tests passent : rejoint le tailnet avec un
+  # nœud Tailscale éphémère (tag:ci), puis se connecte en SSH à meliodas pour y placer le dépôt sur
+  # CE commit (celui qui vient d'être testé, pas « le dernier de main ») et lancer
+  # scripts/deploy.sh. Mise en place unique : README, section « Déploiement continu ».
+  deploy:
+    name: Déploiement — meliodas (via Tailscale)
+    needs: [backend-unit, backend-db, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Secrets rangés dans l'environnement « production » : invisibles des autres branches, et
+    # possibilité d'exiger une approbation manuelle (Settings → Environments → production).
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    # Un déploiement à la fois, jamais interrompu : deux merges rapprochés se suivent.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || 'meliodas' }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/abyss2' }}
+    steps:
+      - name: Rejoindre le tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Préparer SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Empreinte du serveur fixée d'avance : on ne fait pas confiance au premier venu qui répond.
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Déployer
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=20 "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GITHUB_SHA" <<'SCRIPT'
+          set -euo pipefail
+          cd "$1"
+          git fetch --quiet origin main
+          git reset --hard "$2"
+          ./scripts/deploy.sh
+          SCRIPT
+
+      - name: Vérifier depuis l'extérieur
+        if: vars.PUBLIC_URL != ''
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors "${{ vars.PUBLIC_URL }}/api/health"
