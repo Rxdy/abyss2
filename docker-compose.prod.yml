@@ -2,11 +2,16 @@
 #
 #   make up-prod
 #   # équivalent à :
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull api frontend
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 #
 # Ce que ça change par rapport au développement :
-#   - le front est buildé (vite build) et servi par nginx, plus par le serveur de dev de Vite ;
+#   - rien n'est construit sur le serveur : API et front sont des images publiées sur GHCR par la
+#     CI (job « images », après chaque merge sur main), puis tenues à jour par watchtower (label
+#     ci-dessous, comme les autres apps du Pi). Un build sur le Pi l'a déjà mis à genoux ;
+#   - le front est servi par nginx (bundle statique), plus par le serveur de dev de Vite ;
 #   - l'API tourne sans watcher (`npm start`) ni volumes montés — le code vient de l'image ;
+#   - chaque conteneur a une limite de mémoire : une app qui dérape est arrêtée seule ;
 #   - front et API ne publient plus de port sur l'hôte : seul Traefik les atteint, sur le réseau
 #     Docker externe déclaré ci-dessous. C'est lui qui termine le TLS (l'installation de la PWA
 #     l'exige hors localhost) et route un seul domaine : /api vers l'API, le reste vers le front —
@@ -20,17 +25,26 @@
 
 services:
   api:
+    image: ghcr.io/rxdy/abyss-api:latest
+    # `!reset` : supprime le `build` hérité de docker-compose.yml — sans image locale, Compose
+    # retomberait sinon sur un build (voir l'en-tête).
+    build: !reset null
+    pull_policy: missing
+    mem_limit: 256m
+    # Migrations appliquées au démarrage (CMD de backend/Dockerfile.prod) : plus lent sur le Pi.
+    healthcheck:
+      start_period: 60s
     environment:
       NODE_ENV: production
       FRONTEND_URL: https://${DOMAIN}
       CHOKIDAR_USEPOLLING: ""
       CHOKIDAR_INTERVAL: ""
-    command: sh -c "npx prisma migrate deploy && npm start"
     # `!reset` : ces listes existent côté développement (port publié, sources montées en direct) ;
     # sans lui, Compose les FUSIONNE au lieu de les remplacer, et la prod garde les deux.
     ports: !reset []
     volumes: !reset []
     labels:
+      - com.centurylinklabs.watchtower.enable=true
       - traefik.enable=true
       - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
       - traefik.http.services.abyss2-api.loadbalancer.server.port=3000
@@ -44,18 +58,19 @@ services:
       - traefik
 
   frontend:
-    # Nom distinct de l'image de développement (« abyss2-frontend », Dockerfile Vite) : sans ça,
-    # ce build nginx écraserait son tag, et `make up` redémarrerait nginx au lieu du serveur Vite.
-    image: abyss2-frontend-prod
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-      args:
-        # Même origine que l'API derrière Traefik : URL relative, pas de host/port en dur.
-        VITE_API_URL: ""
+    # Construite par la CI (frontend/Dockerfile.prod, VITE_API_URL vide : même origine que l'API
+    # derrière Traefik, URL relative) — nom distinct de l'image de développement.
+    image: ghcr.io/rxdy/abyss-frontend:latest
+    build: !reset null
+    pull_policy: missing
+    mem_limit: 64m
+    # nginx écoute sur 80 — le contrôle de docker-compose.yml vise le serveur Vite (5173).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
     ports: !reset []
     volumes: !reset []
     labels:
+      - com.centurylinklabs.watchtower.enable=true
       - traefik.enable=true
       - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
       - traefik.http.services.abyss2-frontend.loadbalancer.server.port=80
@@ -70,6 +85,7 @@ services:
 
   # Jamais sur le réseau Traefik : seuls front et API doivent être joignables depuis l'extérieur.
   postgres:
+    mem_limit: 256m
     ports: !reset []
 
   # Mailpit ne sert qu'à intercepter les emails en développement (voir docker-compose.yml) : lui
