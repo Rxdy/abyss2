@@ -28,6 +28,35 @@ interface ExportedCategory {
   parentId: string | null
 }
 
+/** Réglages des notifications : clé d'API → colonne de User. */
+const NOTIFICATION_SETTINGS = {
+  envelopeOverspend:   'notifyEnvelopeOverspend',
+  negativeBalance:     'notifyNegativeBalance',
+  uncategorizedDigest: 'notifyUncategorizedDigest',
+} as const
+
+type NotificationSettingKey = keyof typeof NOTIFICATION_SETTINGS
+type NotificationSettings = Record<NotificationSettingKey, boolean>
+
+const notificationSettingsSchema = {
+  type: 'object',
+  properties: {
+    envelopeOverspend:   { type: 'boolean', description: 'Enveloppe dépassée' },
+    negativeBalance:     { type: 'boolean', description: 'Solde passé sous zéro' },
+    uncategorizedDigest: { type: 'boolean', description: 'Rappel hebdomadaire des dépenses non catégorisées' },
+  },
+}
+
+const NOTIFICATION_SELECT = { notifyEnvelopeOverspend: true, notifyNegativeBalance: true, notifyUncategorizedDigest: true } as const
+
+function toSettings(user: Record<(typeof NOTIFICATION_SETTINGS)[NotificationSettingKey], boolean>): NotificationSettings {
+  return {
+    envelopeOverspend:   user.notifyEnvelopeOverspend,
+    negativeBalance:     user.notifyNegativeBalance,
+    uncategorizedDigest: user.notifyUncategorizedDigest,
+  }
+}
+
 export default async function userRoutes(fastify: FastifyInstance) {
   // ── GET /api/user ───────────────────────────────────────
   // Sert aussi à valider le JWT au démarrage du front.
@@ -78,6 +107,44 @@ export default async function userRoutes(fastify: FastifyInstance) {
       // session) : c'est l'endroit naturel pour (re)donner un jeton CSRF après un rechargement de page.
       csrfToken: reply.generateCsrf(),
     })
+  })
+
+  // ── GET /api/user/notification-settings ─────────────────
+  fastify.get('/api/user/notification-settings', {
+    schema: {
+      summary: 'Réglages des notifications (types activés)',
+      tags: ['user'],
+      security: [{ bearerAuth: [] }],
+      response: { 200: notificationSettingsSchema, 401: errorSchema },
+    },
+    preHandler: fastify.authenticate,
+  }, async (req, reply) => {
+    const user = await fastify.prisma.user.findUnique({ where: { id: req.user.userId }, select: NOTIFICATION_SELECT })
+    if (!user) return reply.code(401).send({ error: 'Utilisateur introuvable.', code: 'USER_NOT_FOUND' })
+
+    return toSettings(user)
+  })
+
+  // ── PUT /api/user/notification-settings ─────────────────
+  // Mise à jour partielle : seuls les types présents dans le corps changent. Couper un type arrête
+  // sa génération (voir utils/notifications.ts) ; les notifications déjà reçues restent.
+  fastify.put<{ Body: Partial<NotificationSettings> }>('/api/user/notification-settings', {
+    schema: {
+      summary: 'Activer ou couper des types de notification',
+      tags: ['user'],
+      security: [{ bearerAuth: [] }],
+      body: { ...notificationSettingsSchema, additionalProperties: false, minProperties: 1 },
+      response: { 200: notificationSettingsSchema, 400: errorSchema, 401: errorSchema },
+    },
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req) => {
+    const data: Partial<Record<(typeof NOTIFICATION_SETTINGS)[NotificationSettingKey], boolean>> = {}
+    for (const [key, column] of Object.entries(NOTIFICATION_SETTINGS) as [NotificationSettingKey, (typeof NOTIFICATION_SETTINGS)[NotificationSettingKey]][]) {
+      if (req.body[key] !== undefined) data[column] = req.body[key]
+    }
+
+    const user = await fastify.prisma.user.update({ where: { id: req.user.userId }, data, select: NOTIFICATION_SELECT })
+    return toSettings(user)
   })
 
   // ── DELETE /api/user ─────────────────────────────────────

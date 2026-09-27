@@ -12,6 +12,8 @@
  */
 
 import type { PrismaClient } from '@prisma/client'
+import { decryptValue } from './crypto.js'
+import { notifyAfterChange, type TransactionImpact } from './notifications.js'
 
 /** Sécurité anti-boucle infinie si des dates aberrantes se glissaient quelque part. */
 const MAX_CATCHUP_MONTHS = 240 // 20 ans
@@ -143,12 +145,13 @@ export async function runDueRecurring(prisma: PrismaClient, userId: string, { no
   })
 
   let created = 0
+  const generated: TransactionImpact[] = []
 
   for (const recurring of recurringList) {
     const months = dueMonths(recurring, now)
     if (months.length === 0) continue
 
-    await prisma.$transaction(async (tx) => {
+    const count = await prisma.$transaction(async (tx) => {
       // Le libellé et le montant sont déjà chiffrés sur le modèle récurrent
       // (même clé/usage que les transactions) : on recopie le ciphertext
       // tel quel, pas besoin de déchiffrer/re-chiffrer.
@@ -171,8 +174,27 @@ export async function runDueRecurring(prisma: PrismaClient, userId: string, { no
         where: { id: recurring.id },
         data:  { lastGeneratedMonth: months[months.length - 1] },
       })
+
+      return count
     })
+
+    // Toutes les échéances créées par cet appel : c'est lui qui a fait bouger le solde et les
+    // enveloppes. Une requête concurrente qui n'en a créé qu'une partie (ou aucune) ne sait pas
+    // lesquelles — elle laisse les notifications à celle qui les a toutes écrites.
+    if (count === months.length) {
+      const amount = parseInt(decryptValue(recurring.amountEncrypted, 'transaction-amount'), 10)
+      for (const month of months) {
+        generated.push({
+          categoryId: recurring.categoryId,
+          amount,
+          date:       occurrenceDate(month, recurring.dayOfMonth),
+          type:       recurring.type,
+        })
+      }
+    }
   }
+
+  if (generated.length > 0) await notifyAfterChange(prisma, userId, { added: generated }, now)
 
   return created
 }
