@@ -1,5 +1,6 @@
 <script setup>
 import BaseText from '@/components/atoms/BaseText.vue'
+import BaseIcon from '@/components/atoms/BaseIcon.vue'
 import { formatSignedAmount, formatShortDate } from '@/utils/format.js'
 
 defineProps({
@@ -26,12 +27,22 @@ defineEmits(['select'])
     />
 
     <div class="transaction__body">
-      <BaseText size="sm" weight="medium" color="primary" truncate>
-        {{ transaction.title }}
-      </BaseText>
+      <span class="transaction__title-row">
+        <BaseText size="sm" weight="medium" color="primary" truncate>
+          {{ transaction.title }}
+        </BaseText>
+        <BaseIcon
+          v-if="transaction.recurringId"
+          name="clock"
+          :size="13"
+          class="transaction__recurring-badge"
+          title="Dépense/revenu fixe — générée automatiquement"
+        />
+      </span>
       <BaseText size="xs" color="muted">
         {{ formatShortDate(transaction.date) }}
         <template v-if="transaction.category"> · {{ transaction.category.name }}</template>
+        <template v-if="transaction.recurringId"> · Fixe</template>
       </BaseText>
     </div>
 
@@ -81,6 +92,18 @@ defineEmits(['select'])
   gap: 2px;
   min-width: 0;
   flex: 1;
+}
+
+.transaction__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.transaction__recurring-badge {
+  flex-shrink: 0;
+  color: var(--color-primary);
 }
 
 .transaction__amount {

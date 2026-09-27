@@ -62,3 +62,43 @@ describe('routes inconnues', () => {
     expect(res.statusCode).toBe(404)
   })
 })
+
+describe('démarrage en production', () => {
+  it('refuse de démarrer sans JWT_SECRET (pas de secret de repli)', async () => {
+    const secret = process.env.JWT_SECRET
+    delete process.env.JWT_SECRET
+
+    try {
+      await expect(buildApp({ prisma: mockPrisma })).rejects.toThrow('JWT_SECRET')
+    } finally {
+      process.env.JWT_SECRET = secret
+    }
+  })
+})
+
+describe('en-têtes de sécurité', () => {
+  const headers = async () => (await app.inject({ method: 'GET', url: '/health' })).headers
+
+  it('CSP stricte : une API JSON ne charge rien et ne s\'encadre nulle part', async () => {
+    const csp = String((await headers())['content-security-policy'])
+
+    expect(csp).toContain("default-src 'none'")
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(csp).toContain("base-uri 'none'")
+    expect(csp).toContain("form-action 'none'")
+  })
+
+  it('n\'ajoute pas les directives permissives par défaut de helmet', async () => {
+    const csp = String((await headers())['content-security-policy'])
+
+    expect(csp).not.toMatch(/script-src|style-src|img-src|upgrade-insecure-requests/)
+  })
+
+  it('garde les autres protections de helmet', async () => {
+    const h = await headers()
+
+    expect(h['x-content-type-options']).toBe('nosniff')
+    expect(h['referrer-policy']).toBe('no-referrer')
+    expect(h['x-frame-options']).toBe('SAMEORIGIN')
+  })
+})

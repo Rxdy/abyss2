@@ -8,3 +8,13 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Tests de bout en bout (Playwright)
+test-results/
+playwright-report/
+
+# Notes personnelles, identifiants, audits générés par IA — jamais commités
+.perso/
+
+# Sauvegardes de la base prises à chaque déploiement (scripts/deploy.sh)
+backups/

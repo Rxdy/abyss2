@@ -7,7 +7,25 @@ const routes = [
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginPage.vue'),
-    meta: { layout: 'auth', title: 'Connexion' }
+    meta: { layout: 'auth', title: 'Connexion', guestOnly: true }
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/pages/RegisterPage.vue'),
+    meta: { layout: 'auth', title: 'Inscription', guestOnly: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/pages/ForgotPasswordPage.vue'),
+    meta: { layout: 'auth', title: 'Mot de passe oublié', guestOnly: true }
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/pages/ResetPasswordPage.vue'),
+    meta: { layout: 'auth', title: 'Nouveau mot de passe', guestOnly: true }
   },
 
   // ── App (layout par défaut — protégées) ──────────────────
@@ -25,16 +43,52 @@ const routes = [
     meta: { layout: 'default', title: 'Transactions', requiresAuth: true }
   },
   {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/pages/NotificationsPage.vue'),
+    meta: { layout: 'default', title: 'Notifications', requiresAuth: true }
+  },
+  {
+    path: '/stats',
+    name: 'stats',
+    component: () => import('@/pages/StatsPage.vue'),
+    meta: { layout: 'default', title: 'Statistiques', requiresAuth: true }
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/pages/ProfilePage.vue'),
     meta: { layout: 'default', title: 'Profil', requiresAuth: true }
   },
   {
+    path: '/profile/account',
+    name: 'account',
+    component: () => import('@/pages/AccountPage.vue'),
+    meta: { layout: 'default', title: 'Gestion du compte', requiresAuth: true }
+  },
+  {
+    path: '/profile/preferences',
+    name: 'preferences',
+    component: () => import('@/pages/PreferencesPage.vue'),
+    meta: { layout: 'default', title: 'Préférences', requiresAuth: true }
+  },
+  {
     path: '/profile/categories',
     name: 'categories',
     component: () => import('@/pages/CategoriesPage.vue'),
     meta: { layout: 'default', title: 'Catégories', requiresAuth: true }
+  },
+  {
+    path: '/profile/envelopes',
+    name: 'envelopes',
+    component: () => import('@/pages/EnvelopesPage.vue'),
+    meta: { layout: 'default', title: 'Enveloppes', requiresAuth: true }
+  },
+  {
+    path: '/recurring',
+    name: 'recurring',
+    component: () => import('@/pages/RecurringPage.vue'),
+    meta: { layout: 'default', title: 'Charges fixes', requiresAuth: true }
   },
 
   // ── 404 ───────────────────────────────────────────────────
@@ -65,8 +119,8 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
 
-  // Déjà connecté → pas besoin d'aller sur login
-  if (to.name === 'login' && isAuthenticated) {
+  // Déjà connecté → pas besoin d'aller sur login / register
+  if (to.meta.guestOnly && isAuthenticated) {
     return { name: 'home' }
   }
 })

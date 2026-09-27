@@ -3,9 +3,13 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi.js'
 import { useAuthStore } from '@/stores/auth.store.js'
-import BaseText   from '@/components/atoms/BaseText.vue'
-import BaseButton from '@/components/atoms/BaseButton.vue'
-import BaseIcon   from '@/components/atoms/BaseIcon.vue'
+import BaseText      from '@/components/atoms/BaseText.vue'
+import BaseButton    from '@/components/atoms/BaseButton.vue'
+import BaseIcon      from '@/components/atoms/BaseIcon.vue'
+import AlertBanner from '@/components/molecules/AlertBanner.vue'
+import DangerZone   from '@/components/organisms/DangerZone.vue'
+import ResetDataButton from '@/components/organisms/ResetDataButton.vue'
+import { todayISO } from '@/utils/format.js'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -13,6 +17,26 @@ const api    = useApi()
 
 const profile = ref(null)
 const error   = ref('')
+
+// ── Export des données (portabilité) ─────────────────────────────────────
+const EXPORTS = [
+  { format: 'json', label: 'Tout exporter (JSON)' },
+  { format: 'csv',  label: 'Transactions (CSV)' },
+]
+const exporting   = ref('')
+const exportError = ref('')
+
+async function exportData(format) {
+  exporting.value = format
+  exportError.value = ''
+  try {
+    await api.download(`/api/user/export?format=${format}`, `abyss2-${todayISO()}.${format}`)
+  } catch (err) {
+    exportError.value = err.message
+  } finally {
+    exporting.value = ''
+  }
+}
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
 
@@ -29,8 +53,8 @@ async function loadProfile() {
   }
 }
 
-function logout() {
-  auth.logout()
+async function logout() {
+  await auth.logout()
   router.push({ name: 'login' })
 }
 
@@ -41,9 +65,7 @@ onMounted(loadProfile)
   <section class="profile">
     <BaseText as="h1" size="2xl" weight="bold" color="primary">Profil</BaseText>
 
-    <div v-if="error" class="profile__error" role="alert">
-      <BaseText size="sm" color="danger">{{ error }}</BaseText>
-    </div>
+    <AlertBanner v-if="error">{{ error }}</AlertBanner>
 
     <dl class="profile__list">
       <div class="profile__row">
@@ -85,6 +107,24 @@ onMounted(loadProfile)
 
     <!-- Réglages -->
     <nav class="profile__settings" aria-label="Réglages du compte">
+      <RouterLink to="/profile/account" class="profile__setting">
+        <BaseIcon name="user" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Gestion du compte</BaseText>
+          <BaseText size="xs" color="muted">Adresse email, mot de passe</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
+
+      <RouterLink to="/profile/preferences" class="profile__setting">
+        <BaseIcon name="sun" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Préférences</BaseText>
+          <BaseText size="xs" color="muted">Thème, devise, session, notifications</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
+
       <RouterLink to="/profile/categories" class="profile__setting">
         <BaseIcon name="tag" :size="18" />
         <div class="profile__setting-body">
@@ -93,17 +133,53 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
+
+      <RouterLink to="/profile/envelopes" class="profile__setting">
+        <BaseIcon name="mail" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Enveloppes</BaseText>
+          <BaseText size="xs" color="muted">Plafonds mensuels par groupe de catégories</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
     </nav>
 
+    <!-- Mes données : export -->
+    <section class="profile__section">
+      <BaseText as="h2" size="sm" weight="semibold" color="primary">Mes données</BaseText>
+
+      <AlertBanner v-if="exportError">{{ exportError }}</AlertBanner>
+
+      <BaseButton
+        v-for="option in EXPORTS"
+        :key="option.format"
+        variant="secondary"
+        full
+        :loading="exporting === option.format"
+        :disabled="exporting !== ''"
+        @click="exportData(option.format)"
+      >
+        <BaseIcon name="download" :size="18" />
+        {{ option.label }}
+      </BaseButton>
+
+      <ResetDataButton />
+    </section>
+
     <div class="profile__actions">
-      <BaseButton variant="danger" full @click="logout">
+      <BaseButton class="profile__logout" variant="danger" full @click="logout">
         <BaseIcon name="logout" :size="18" />
         Se déconnecter
       </BaseButton>
       <BaseText size="xs" color="muted">
-        La session n'est gardée que dans cet onglet.
+        {{ auth.user?.sessionMode === 'strict'
+          ? 'Déconnexion automatique à la fermeture du navigateur ou après 30 minutes d\'inactivité.'
+          : 'Vous restez connecté sur cet appareil — modifiable dans les Préférences.' }}
       </BaseText>
     </div>
+
+    <DangerZone />
+
   </section>
 </template>
 
@@ -117,11 +193,14 @@ onMounted(loadProfile)
   width: 100%;
 }
 
-.profile__error {
-  background: var(--color-danger-subtle);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+.profile__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .profile__list {
@@ -183,4 +262,5 @@ onMounted(loadProfile)
   align-items: center;
   gap: var(--space-2);
 }
+
 </style>
