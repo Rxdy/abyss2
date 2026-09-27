@@ -14,7 +14,7 @@ import { useDirtyForm }      from '@/composables/useDirtyForm.js'
 import { useCategoriesStore } from '@/stores/categories.store.js'
 import { useEnvelopesStore }  from '@/stores/envelopes.store.js'
 import { useToastStore }      from '@/stores/toast.store.js'
-import { formatAmount, parseAmountToCents } from '@/utils/format.js'
+import { formatAmount, parseAmountToCents, currencySymbol } from '@/utils/format.js'
 
 const props = defineProps({
   envelope: { type: Object, default: null },
@@ -98,7 +98,7 @@ async function submit() {
     <BaseInput
       v-model="form.budget"
       id="envelope-budget"
-      label="Montant alloué par mois (€)"
+      :label="`Montant alloué par mois (${currencySymbol()})`"
       placeholder="400"
       inputmode="decimal"
       hint="Idéalement financé par vos revenus du mois : une jauge apparaît sur l'accueil."

@@ -64,7 +64,10 @@ async function submit() {
     // session (cookie httpOnly) — un GET /api/user classique complète le store (email, jeton CSRF),
     // exactement comme au démarrage de l'app (voir App.vue).
     const profile = await api.get('/api/user')
-    auth.setSession({ user: { id: profile.id, email: profile.email }, csrfToken: profile.csrfToken })
+    auth.setSession({
+      user: { id: profile.id, email: profile.email, currency: profile.currency, sessionMode: profile.sessionMode },
+      csrfToken: profile.csrfToken,
+    })
 
     done.value = true
     setTimeout(() => router.push({ name: 'home' }), 1500)

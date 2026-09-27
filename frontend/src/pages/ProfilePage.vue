@@ -8,9 +8,7 @@ import BaseButton    from '@/components/atoms/BaseButton.vue'
 import BaseIcon      from '@/components/atoms/BaseIcon.vue'
 import AlertBanner from '@/components/molecules/AlertBanner.vue'
 import DangerZone   from '@/components/organisms/DangerZone.vue'
-import FormModal    from '@/components/organisms/FormModal.vue'
 import ResetDataButton from '@/components/organisms/ResetDataButton.vue'
-import PasswordChangeForm from '@/components/organisms/PasswordChangeForm.vue'
 import { todayISO } from '@/utils/format.js'
 
 const router = useRouter()
@@ -19,8 +17,6 @@ const api    = useApi()
 
 const profile = ref(null)
 const error   = ref('')
-
-const passwordOpen = ref(false)
 
 // ── Export des données (portabilité) ─────────────────────────────────────
 const EXPORTS = [
@@ -111,6 +107,24 @@ onMounted(loadProfile)
 
     <!-- Réglages -->
     <nav class="profile__settings" aria-label="Réglages du compte">
+      <RouterLink to="/profile/account" class="profile__setting">
+        <BaseIcon name="user" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Gestion du compte</BaseText>
+          <BaseText size="xs" color="muted">Adresse email, mot de passe</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
+
+      <RouterLink to="/profile/preferences" class="profile__setting">
+        <BaseIcon name="sun" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Préférences</BaseText>
+          <BaseText size="xs" color="muted">Thème, devise, session, notifications</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
+
       <RouterLink to="/profile/categories" class="profile__setting">
         <BaseIcon name="tag" :size="18" />
         <div class="profile__setting-body">
@@ -152,26 +166,20 @@ onMounted(loadProfile)
       <ResetDataButton />
     </section>
 
-    <BaseButton variant="secondary" full @click="passwordOpen = true">
-      <BaseIcon name="key" :size="18" />
-      Changer le mot de passe
-    </BaseButton>
-
     <div class="profile__actions">
       <BaseButton class="profile__logout" variant="danger" full @click="logout">
         <BaseIcon name="logout" :size="18" />
         Se déconnecter
       </BaseButton>
       <BaseText size="xs" color="muted">
-        La session n'est gardée que dans cet onglet.
+        {{ auth.user?.sessionMode === 'strict'
+          ? 'Déconnexion automatique à la fermeture du navigateur ou après 30 minutes d\'inactivité.'
+          : 'Vous restez connecté sur cet appareil — modifiable dans les Préférences.' }}
       </BaseText>
     </div>
 
     <DangerZone />
 
-    <FormModal v-if="passwordOpen" title="Changer le mot de passe" @close="passwordOpen = false">
-      <PasswordChangeForm @saved="passwordOpen = false" @cancel="passwordOpen = false" />
-    </FormModal>
   </section>
 </template>
 

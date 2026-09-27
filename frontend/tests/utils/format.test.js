@@ -2,8 +2,8 @@
  * Tests utilitaire — format
  */
 
-import { describe, it, expect } from 'vitest'
-import { todayISO } from '@/utils/format.js'
+import { describe, it, expect, afterEach } from 'vitest'
+import { todayISO, formatAmount, formatSignedAmount, currencySymbol, setCurrency, getCurrency, CURRENCIES } from '@/utils/format.js'
 
 describe('todayISO', () => {
   it('donne la date locale (pas la date UTC) au format yyyy-mm-dd', () => {
@@ -14,5 +14,31 @@ describe('todayISO', () => {
 
   it('complète mois et jour sur deux chiffres', () => {
     expect(todayISO(new Date(2026, 2, 5, 12))).toBe('2026-03-05')
+  })
+})
+
+describe('devise d\'affichage', () => {
+  afterEach(() => setCurrency('EUR'))
+
+  it('euro par défaut', () => {
+    expect(formatAmount(123456)).toBe('1\u202f234,56\u00a0€')
+    expect(currencySymbol()).toBe('€')
+  })
+
+  it('suit la devise choisie, symbole compris', () => {
+    setCurrency('CHF')
+    expect(formatAmount(4250)).toContain('CHF')
+    expect(formatSignedAmount(4250, 'expense')).toMatch(/^-.*CHF$/)
+    expect(currencySymbol()).toBe('CHF')
+    expect(getCurrency()).toBe('CHF')
+  })
+
+  it('une devise inconnue retombe sur l\'euro', () => {
+    setCurrency('JPY')
+    expect(getCurrency()).toBe('EUR')
+  })
+
+  it('propose la même liste que l\'API', () => {
+    expect(CURRENCIES.map((c) => c.code)).toEqual(['EUR', 'USD', 'GBP', 'CHF', 'CAD'])
   })
 })

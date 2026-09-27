@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { useApi } from '@/composables/useApi.js'
 import { matchesSearch } from '@/utils/search.js'
+import { useNotificationsStore } from '@/stores/notifications.store.js'
+
+/** Une écriture peut faire franchir un seuil (enveloppe, solde) : pas attendu, l'UI n'en dépend pas. */
+function refreshNotifications() {
+  useNotificationsStore().refreshAfterChange()
+}
 
 /** Récap vide — évite les `?.` partout dans les composants. */
 function emptySummary() {
@@ -157,6 +163,7 @@ export const useTransactionsStore = defineStore('transactions', {
       const created = await useApi().post('/api/transactions', payload)
       this.items.unshift(created)
       this.total += 1
+      refreshNotifications()
       return created
     },
 
@@ -164,6 +171,7 @@ export const useTransactionsStore = defineStore('transactions', {
       const updated = await useApi().put(`/api/transactions/${id}`, payload)
       const index   = this.items.findIndex((transaction) => transaction.id === id)
       if (index !== -1) this.items[index] = updated
+      refreshNotifications()
       return updated
     },
 
@@ -171,6 +179,7 @@ export const useTransactionsStore = defineStore('transactions', {
       await useApi().del(`/api/transactions/${id}`)
       this.items = this.items.filter((transaction) => transaction.id !== id)
       this.total = Math.max(0, this.total - 1)
+      refreshNotifications()
     },
   },
 })

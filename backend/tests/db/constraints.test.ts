@@ -255,12 +255,30 @@ describe('contraintes CHECK', () => {
     expect(error).toMatch(/chk_categories_not_own_parent/)
   })
 
+  it.each(['EUR', 'USD', 'GBP', 'CHF', 'CAD'])('accepte la devise « %s »', async (currency) => {
+    expect(await sqlError(`UPDATE dbo.users SET currency = $2 WHERE id = $1::uuid`, userId, currency)).toBeNull()
+  })
+
+  it.each(['JPY', 'eur', ''])('refuse la devise « %s »', async (currency) => {
+    expect(await sqlError(`UPDATE dbo.users SET currency = $2 WHERE id = $1::uuid`, userId, currency))
+      .toMatch(/chk_users_currency/)
+  })
+
+  it.each(['persistent', 'strict'])('accepte le mode de session « %s »', async (mode) => {
+    expect(await sqlError(`UPDATE dbo.users SET session_mode = $2 WHERE id = $1::uuid`, userId, mode)).toBeNull()
+  })
+
+  it.each(['forever', 'STRICT', ''])('refuse le mode de session « %s »', async (mode) => {
+    expect(await sqlError(`UPDATE dbo.users SET session_mode = $2 WHERE id = $1::uuid`, userId, mode))
+      .toMatch(/chk_users_session_mode/)
+  })
+
   it('refuse un token_version négatif', async () => {
     expect(await sqlError(`UPDATE dbo.users SET token_version = -1 WHERE id = $1::uuid`, userId))
       .toMatch(/chk_users_token_version/)
   })
 
-  it.each(['envelope_overspend', 'uncategorized_digest'])('accepte le type de notification « %s »', async (type) => {
+  it.each(['envelope_overspend', 'uncategorized_digest', 'negative_balance'])('accepte le type de notification « %s »', async (type) => {
     expect(await sqlError(`INSERT INTO dbo.notifications (user_id, type) VALUES ($1::uuid, $2)`, userId, type))
       .toBeNull()
   })

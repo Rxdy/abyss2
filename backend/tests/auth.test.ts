@@ -258,7 +258,32 @@ describe('POST /api/auth/login', () => {
 
     expect(decoded.userId).toBe('uuid-test-user')
     expect(decoded.email).toBe('alice@example.com')
-    expect(decoded.exp - decoded.iat).toBe(7 * 24 * 60 * 60) // 7 jours
+    expect(decoded.exp - decoded.iat).toBe(30 * 24 * 60 * 60) // « rester connecté » : 30 jours
+  })
+
+  it('« rester connecté » (défaut) : cookie persistant de 30 jours', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(await makeFakeUser('alice@example.com', 'password123'))
+
+    const res = await login({ email: 'alice@example.com', password: 'password123' })
+    const cookie = res.cookies.find((c: any) => c.name === 'token')
+
+    expect(cookie.maxAge).toBe(30 * 24 * 60 * 60)
+    expect(res.json().user.sessionMode).toBeUndefined() // makeFakeUser n'en a pas : défaut appliqué côté cookie
+  })
+
+  it('« connexion à chaque session » : cookie de session (sans durée) et jeton de 30 minutes', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      ...(await makeFakeUser('alice@example.com', 'password123')), sessionMode: 'strict',
+    })
+
+    const res = await login({ email: 'alice@example.com', password: 'password123' })
+    const cookie = res.cookies.find((c: any) => c.name === 'token')
+    const decoded: any = app.jwt.verify(cookie.value)
+
+    expect(cookie.maxAge).toBeUndefined()
+    expect(cookie.expires).toBeUndefined()
+    expect(decoded.exp - decoded.iat).toBe(30 * 60)
+    expect(res.json().user.sessionMode).toBe('strict')
   })
 
   it('401 — email inconnu', async () => {

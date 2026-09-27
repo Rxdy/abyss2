@@ -1,7 +1,9 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import BaseText  from '@/components/atoms/BaseText.vue'
 import BaseChip  from '@/components/atoms/BaseChip.vue'
+import BaseButton from '@/components/atoms/BaseButton.vue'
 import AlertBanner    from '@/components/molecules/AlertBanner.vue'
 import NotificationRow from '@/components/molecules/NotificationRow.vue'
 import { useNotificationsStore } from '@/stores/notifications.store.js'
@@ -9,6 +11,14 @@ import { useToastStore } from '@/stores/toast.store.js'
 
 const notifications = useNotificationsStore()
 const toasts        = useToastStore()
+const router        = useRouter()
+
+/** Écran où agir sur chaque type de notification. */
+const TARGETS = {
+  envelope_overspend:   '/profile/envelopes',
+  negative_balance:     '/',
+  uncategorized_digest: { path: '/transactions', query: { category: 'none', type: 'expense' } },
+}
 
 const tab = ref('active') // 'active' | 'archived'
 
@@ -20,6 +30,19 @@ watch(tab, load, { immediate: true })
 
 async function open(notification) {
   if (!notification.read) await notifications.markRead(notification.id).catch(() => {})
+  const target = TARGETS[notification.type]
+  if (target) router.push(target)
+}
+
+const hasUnread = computed(() => tab.value === 'active' && notifications.items.some((n) => !n.read))
+
+async function markAllRead() {
+  try {
+    await notifications.markAllRead()
+    toasts.success('Toutes les notifications sont lues.')
+  } catch (err) {
+    notifications.error = err.message
+  }
 }
 
 async function archive(id) {
@@ -46,13 +69,17 @@ async function remove(id) {
     <header class="notifications__head">
       <BaseText as="h1" size="2xl" weight="bold" color="primary">Notifications</BaseText>
       <BaseText as="p" size="sm" color="muted">
-        Dépassements d'enveloppe, dépenses non catégorisées.
+        Dépassements d'enveloppe, solde négatif, dépenses non catégorisées.
       </BaseText>
     </header>
 
     <div class="notifications__tabs" role="tablist" aria-label="Notifications">
       <BaseChip :active="tab === 'active'" @click="tab = 'active'">Actives</BaseChip>
       <BaseChip :active="tab === 'archived'" @click="tab = 'archived'">Archivées</BaseChip>
+
+      <BaseButton v-if="hasUnread" class="notifications__read-all" variant="ghost" size="sm" @click="markAllRead">
+        Tout marquer comme lu
+      </BaseButton>
     </div>
 
     <AlertBanner v-if="notifications.error">{{ notifications.error }}</AlertBanner>
@@ -92,8 +119,11 @@ async function remove(id) {
 
 .notifications__tabs {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
 }
+
+.notifications__read-all { margin-left: auto; }
 
 .notifications__list {
   background: var(--color-bg-surface);

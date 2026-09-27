@@ -23,6 +23,13 @@ describe('BaseInput', () => {
     expect(w.find('label').classes()).toContain('field__label--hidden')
   })
 
+  it('transmet inputmode et autocomplete à l\'input, pas à la div qui l\'enveloppe', () => {
+    const w = mount(BaseInput, { props: { id: 'inp-amount' }, attrs: { inputmode: 'decimal', autocomplete: 'off' } })
+    expect(w.find('input').attributes('inputmode')).toBe('decimal')
+    expect(w.find('input').attributes('autocomplete')).toBe('off')
+    expect(w.find('.field').attributes('inputmode')).toBeUndefined()
+  })
+
   it('transmet min et max à l\'input (bornes d\'une plage de dates)', () => {
     const w = mount(BaseInput, { props: { type: 'date', min: '2026-01-01', max: '2026-12-31' } })
     expect(w.find('input').attributes('min')).toBe('2026-01-01')

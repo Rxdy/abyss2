@@ -250,4 +250,4 @@ export default async function envelopeRoutes(fastify: FastifyInstance) {
   })
 }
 
-export { NAME_USAGE as ENVELOPE_NAME_USAGE }
+export { NAME_USAGE as ENVELOPE_NAME_USAGE, BUDGET_USAGE as ENVELOPE_BUDGET_USAGE }

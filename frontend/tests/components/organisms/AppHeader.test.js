@@ -34,8 +34,8 @@ describe('AppHeader — contenu', () => {
     expect(nav.findAll('a')).toHaveLength(5)
   })
 
-  it('propose la bascule de thème', () => {
-    expect(mount(AppHeader).find('.theme-toggle').exists()).toBe(true)
+  it('ne porte plus la bascule de thème : le réglage vit dans le Profil', () => {
+    expect(mount(AppHeader).find('.theme-toggle').exists()).toBe(false)
   })
 
   it('n\'affiche pas le bouton d\'installation quand la PWA n\'est pas installable', () => {

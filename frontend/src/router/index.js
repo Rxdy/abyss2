@@ -61,6 +61,18 @@ const routes = [
     meta: { layout: 'default', title: 'Profil', requiresAuth: true }
   },
   {
+    path: '/profile/account',
+    name: 'account',
+    component: () => import('@/pages/AccountPage.vue'),
+    meta: { layout: 'default', title: 'Gestion du compte', requiresAuth: true }
+  },
+  {
+    path: '/profile/preferences',
+    name: 'preferences',
+    component: () => import('@/pages/PreferencesPage.vue'),
+    meta: { layout: 'default', title: 'Préférences', requiresAuth: true }
+  },
+  {
     path: '/profile/categories',
     name: 'categories',
     component: () => import('@/pages/CategoriesPage.vue'),

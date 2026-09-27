@@ -13,8 +13,12 @@ const props = defineProps({
 
 defineEmits(['open', 'archive', 'remove'])
 
-const ICONS = { envelope_overspend: 'bell', uncategorized_digest: 'tag' }
+const ICONS = { envelope_overspend: 'wallet', uncategorized_digest: 'tag', negative_balance: 'alert' }
 const icon = ICONS[props.notification.type] ?? 'bell'
+
+/** Alertes financières (dépassement, solde négatif) : icône teintée, à distinguer d'un simple rappel. */
+const ALERTS = new Set(['envelope_overspend', 'negative_balance'])
+const alert = ALERTS.has(props.notification.type)
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' })
 function formatDate(value) {
@@ -26,7 +30,7 @@ function formatDate(value) {
 <template>
   <li class="notification" :class="{ 'notification--unread': !notification.read }">
     <component :is="'button'" type="button" class="notification__main" @click="$emit('open')">
-      <span class="notification__icon" aria-hidden="true"><BaseIcon :name="icon" :size="18" /></span>
+      <span class="notification__icon" :class="{ 'notification__icon--alert': alert }" aria-hidden="true"><BaseIcon :name="icon" :size="18" /></span>
 
       <span class="notification__body">
         <span class="notification__title-row">
@@ -82,6 +86,11 @@ function formatDate(value) {
   justify-content: center;
   background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
+}
+
+.notification__icon--alert {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
 }
 
 .notification__body {

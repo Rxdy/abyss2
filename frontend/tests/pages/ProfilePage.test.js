@@ -32,9 +32,19 @@ describe('ProfilePage — affichage', () => {
     mount(ProfilePage)
     await flushPromises()
 
-    const [url, options] = fetchMock.mock.calls[0]
-    expect(url).toMatch(/\/api\/user$/)
+    const [, options] = fetchMock.mock.calls.find(([url]) => /\/api\/user$/.test(url))
     expect(options.credentials).toBe('include')
+  })
+
+  it('mène à la gestion du compte et aux préférences', async () => {
+    mockFetch(PROFILE)
+
+    const w = mount(ProfilePage)
+    await flushPromises()
+
+    const links = w.findAll('a').map((a) => a.attributes('href'))
+    expect(links).toContain('/profile/account')
+    expect(links).toContain('/profile/preferences')
   })
 
   it('affiche email, date de création et identifiant', async () => {

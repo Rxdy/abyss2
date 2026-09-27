@@ -49,10 +49,22 @@ ou un `make clean`). Pour remplir le compte de démo :
 make seed
 ```
 
-Le seed passe par l'API (chiffrement, validations et génération des charges fixes
-sont ceux de l'app) : catégories et sous-catégories, ~110 dépenses courantes, revenus
-ponctuels, une transaction sans catégorie, et 12 charges fixes dont une terminée,
-une en pause et une au 29 du mois. Rejouable à volonté : le compte est supprimé puis
+Pour repartir d'une base **vierge** et tout remettre en place d'un coup (reset,
+migrations, comptes de test, compte de démo rempli) :
+
+```bash
+make db-fresh   # ⚠️ efface toutes les données locales
+```
+
+Le seed passe par l'API (chiffrement, validations, génération des charges fixes et
+des notifications sont ceux de l'app) : catégories et sous-catégories, 3 enveloppes
+(dont une dépassée ce mois-ci), ~110 dépenses courantes, revenus ponctuels, une
+transaction sans catégorie, 12 charges fixes dont une terminée, une en pause et une
+au 29 du mois, et une réparation qui fait passer le solde sous zéro avant le
+remboursement de l'assurance. Les notifications (enveloppe dépassée, solde négatif,
+dépenses non catégorisées) ne sont jamais insérées : elles naissent de ces
+opérations, et le seed échoue si l'une d'elles manque — `make db-fresh` sert donc
+aussi de test de fumée de toute la chaîne sur une base neuve. Rejouable à volonté : le compte est supprimé puis
 recréé. Les dates suivent le jour d'exécution (toujours 6 mois glissants), les
 montants et la forme des données sont déterministes
 ([backend/scripts/demo-data.ts](backend/scripts/demo-data.ts)).
@@ -186,8 +198,83 @@ pull request vers `main`, `staging` et `dev` :
 | `backend-unit` | tests API, Prisma mocké — aucune base requise |
 | `backend-db`   | tests d'intégration contre un vrai PostgreSQL (service container + `prisma migrate deploy`) |
 | `frontend`     | tests front + `vite build` |
+| `deploy`       | **push sur `main` seulement**, après les trois autres : déploiement sur meliodas (voir ci-dessous) |
 
-Un merge est bloqué tant que les trois jobs ne sont pas verts.
+Un merge est bloqué tant que les trois jobs de tests ne sont pas verts.
+
+## Déploiement continu
+
+Chaque merge sur `main` part en production sur **meliodas**, une fois les tests passés :
+
+```
+merge sur main → tests (3 jobs) → job deploy :
+  1. rejoint le tailnet (nœud Tailscale éphémère, tag:ci)
+  2. SSH vers meliodas : dépôt placé sur LE commit testé (git reset --hard <sha>)
+  3. scripts/deploy.sh : sauvegarde pg_dump → make up-prod (migrations au démarrage de l'API)
+     → attente de santé API + front, sinon échec avec les logs
+  4. (si PUBLIC_URL est défini) GET <PUBLIC_URL>/api/health depuis l'extérieur
+```
+
+Un seul déploiement à la fois ; deux merges rapprochés se suivent. Pas de retour arrière
+automatique (le schéma a pu avancer) : en cas d'échec, corriger et remerger, ou restaurer la
+sauvegarde du déploiement (`backups/` sur le serveur, 14 dernières gardées). Pour redéployer à la
+main sur le serveur : `make deploy`.
+
+### Mise en place (une seule fois)
+
+**1. Tailscale** — dans la console d'administration :
+
+- *Access controls* : déclarer le tag et autoriser le SSH de la CI vers meliodas, rien d'autre :
+  ```jsonc
+  "tagOwners": { "tag:ci": ["autogroup:admin"] },
+  "hosts":     { "meliodas": "100.x.y.z" },   // IP Tailscale de meliodas (tailscale ip -4)
+  "grants": [
+    { "src": ["tag:ci"], "dst": ["meliodas"], "ip": ["tcp:22"] }
+  ]
+  ```
+  La CI n'atteint que le port SSH de meliodas — aucune autre machine du tailnet.
+- *Settings → OAuth clients* : créer un client avec le scope **`auth_keys` (écriture)**, restreint
+  au tag `tag:ci` → noter l'ID et le secret.
+
+**2. meliodas** — Docker (+ plugin compose), `make` et `git` installés, Traefik déjà en place
+(voir `docker-compose.prod.yml`) :
+
+```bash
+sudo useradd -m -s /bin/bash -G docker deploy        # utilisateur dédié au déploiement
+sudo mkdir -p /srv/abyss2 && sudo chown deploy: /srv/abyss2
+sudo -iu deploy
+git clone https://github.com/Rxdy/abyss2.git /srv/abyss2
+cp /srv/abyss2/.env.example /srv/abyss2/.env && chmod 600 /srv/abyss2/.env
+# → remplir .env : secrets de PRODUCTION (DB_PASSWORD, JWT_SECRET, MASTER_SECRET générés pour
+#   l'occasion — jamais ceux du dev), DOMAIN, TRAEFIK_*, SMTP_*
+ssh-keygen -t ed25519 -N '' -C github-deploy -f ~/.ssh/github_deploy
+cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys   # la CI se connecte avec cette clé
+cat ~/.ssh/github_deploy                                  # → secret DEPLOY_SSH_KEY, puis :
+rm ~/.ssh/github_deploy
+```
+
+⚠️ `MASTER_SECRET` chiffre les données en base : le perdre ou le changer rend tout illisible.
+Le sauvegarder hors du serveur (gestionnaire de mots de passe).
+
+**3. GitHub** — *Settings → Environments → New environment* `production` (option : *Required
+reviewers* pour valider chaque mise en ligne), puis dans cet environnement :
+
+| Type | Nom | Valeur |
+|------|-----|--------|
+| Secret | `TS_OAUTH_CLIENT_ID` | ID du client OAuth Tailscale |
+| Secret | `TS_OAUTH_SECRET` | secret du client OAuth Tailscale |
+| Secret | `DEPLOY_SSH_KEY` | clé privée générée à l'étape 2 |
+| Secret | `DEPLOY_KNOWN_HOSTS` | empreinte du serveur : `ssh-keyscan meliodas` lancé depuis une machine du tailnet |
+| Variable | `DEPLOY_HOST` | `meliodas` (défaut) |
+| Variable | `DEPLOY_USER` | `deploy` (défaut) |
+| Variable | `DEPLOY_PATH` | `/srv/abyss2` (défaut) |
+| Variable | `PUBLIC_URL` | optionnel, ex. `https://abyss2.mondomaine.fr` — vérification finale depuis l'extérieur |
+
+**4. Premier déploiement** : lancer `make deploy` une fois sur meliodas (en tant que `deploy`) pour
+vérifier `.env` et Traefik ; ensuite, chaque merge sur `main` s'en charge.
+
+> Une fois la production en service, **les migrations déjà appliquées ne se modifient plus** :
+> tout changement de schéma passe par une nouvelle migration (`npx prisma migrate dev --name …`).
 
 ## Workflow Git
 

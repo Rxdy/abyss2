@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useNotificationsStore } from '@/stores/notifications.store.js'
+import { useToastStore } from '@/stores/toast.store.js'
 import { mockApi, calls } from './_helpers.js'
 
 const notif = (id, extra = {}) => ({
@@ -125,5 +126,74 @@ describe('notifications.store — archive / remove', () => {
     await store.archive('n1')
 
     expect(store.unreadCount).toBe(0)
+  })
+})
+
+describe('notifications.store — après une écriture de transactions', () => {
+  it('nouvelles notifications : met à jour le badge et les annonce en toast', async () => {
+    mockApi(({ url }) => (url.pathname.endsWith('/unread-count')
+      ? { body: { count: 3 } }
+      : { body: [
+          notif('n3', { message: 'Votre solde est passé sous zéro.' }),
+          notif('n2', { message: 'L\'enveloppe « Courses » a dépassé son plafond mensuel.' }),
+          notif('n1', { message: 'ancienne' }),
+        ] }))
+    const store = useNotificationsStore()
+    store.unreadCount = 1
+
+    await store.refreshAfterChange()
+
+    expect(store.unreadCount).toBe(3)
+    expect(useToastStore().items.map((t) => [t.message, t.tone])).toEqual([
+      ['Votre solde est passé sous zéro.', 'danger'],
+      ['L\'enveloppe « Courses » a dépassé son plafond mensuel.', 'danger'],
+    ])
+  })
+
+  it('rien de nouveau : ne recharge pas la liste, aucun toast', async () => {
+    const fetchMock = mockApi(() => ({ body: { count: 2 } }))
+    const store = useNotificationsStore()
+    store.unreadCount = 2
+
+    await store.refreshAfterChange()
+
+    expect(calls(fetchMock).map((c) => c.path)).toEqual(['/api/notifications/unread-count'])
+    expect(useToastStore().items).toHaveLength(0)
+  })
+
+  it('réponse inattendue du compteur : garde la valeur connue', async () => {
+    mockApi(() => ({ body: {} }))
+    const store = useNotificationsStore()
+    store.unreadCount = 2
+
+    await store.fetchUnreadCount()
+
+    expect(store.unreadCount).toBe(2)
+  })
+})
+
+describe('notifications.store — tout marquer comme lu', () => {
+  it('appelle read-all, passe les lignes en lues et remet le badge à zéro', async () => {
+    const fetchMock = mockApi(() => ({ body: { updated: 2 } }))
+    const store = useNotificationsStore()
+    store.items = [notif('n1'), notif('n2'), notif('n3', { read: true })]
+    store.unreadCount = 2
+
+    await store.markAllRead()
+
+    expect(calls(fetchMock)).toEqual([{ method: 'POST', path: '/api/notifications/read-all', body: undefined }])
+    expect(store.items.every((n) => n.read)).toBe(true)
+    expect(store.unreadCount).toBe(0)
+  })
+
+  it('échec : lève et ne touche à rien', async () => {
+    mockApi(() => ({ ok: false, status: 500, body: { error: 'boom' } }))
+    const store = useNotificationsStore()
+    store.items = [notif('n1')]
+    store.unreadCount = 1
+
+    await expect(store.markAllRead()).rejects.toThrow('boom')
+    expect(store.items[0].read).toBe(false)
+    expect(store.unreadCount).toBe(1)
   })
 })

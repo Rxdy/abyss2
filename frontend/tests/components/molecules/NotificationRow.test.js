@@ -23,6 +23,21 @@ describe('NotificationRow', () => {
     expect(w.text()).toContain('Vie quotidienne')
   })
 
+  it.each([
+    ['envelope_overspend', true],
+    ['negative_balance', true],
+    ['uncategorized_digest', false],
+  ])('« %s » : icône d\'alerte teintée = %s', (type, tinted) => {
+    const w = mountRow({ notification: { ...notification, type } })
+    expect(w.find('.notification__icon--alert').exists()).toBe(tinted)
+  })
+
+  it('chaque type a sa propre icône', () => {
+    const paths = ['envelope_overspend', 'negative_balance', 'uncategorized_digest']
+      .map((type) => mountRow({ notification: { ...notification, type } }).find('.notification__icon path').attributes('d'))
+    expect(new Set(paths).size).toBe(3)
+  })
+
   it('non lue : pastille visible', () => {
     expect(mountRow().find('.notification__dot').exists()).toBe(true)
     expect(mountRow({ notification: { ...notification, read: true } }).find('.notification__dot').exists()).toBe(false)
