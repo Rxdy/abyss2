@@ -125,7 +125,10 @@ async function submit() {
     <BaseInput
       v-model="form.dayOfMonth"
       id="recurring-day"
-      type="number"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      maxlength="2"
+      autocomplete="off"
       label="Jour du mois"
       hint="Ramené au dernier jour du mois si celui-ci est plus court (ex : 31 → 30 avril)."
       :error="errors.dayOfMonth"
