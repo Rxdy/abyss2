@@ -167,8 +167,8 @@ export async function buildApp(opts: { testing?: boolean; prisma?: PrismaClient 
     fastify.register(swagger, {
       openapi: {
         info: {
-          title: 'Abyss2 API',
-          description: "Documentation complète de l'API Abyss2.",
+          title: 'Abyss API',
+          description: "Documentation complète de l'API Abyss.",
           version: '1.0.0',
         },
         servers: [{ url: 'http://localhost:3002', description: 'Local' }],

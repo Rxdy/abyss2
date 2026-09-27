@@ -10,7 +10,7 @@ defineProps({
 <template>
   <div class="brand">
     <AppLogo class="brand__logo" :size="96" />
-    <BaseText as="h1" size="3xl" weight="bold" color="primary">ABYSS2</BaseText>
+    <BaseText as="h1" size="3xl" weight="bold" color="primary">ABYSS</BaseText>
     <BaseText v-if="subtitle" as="p" size="sm" color="muted">{{ subtitle }}</BaseText>
   </div>
 </template>

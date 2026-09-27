@@ -14,7 +14,7 @@ const { visible, update, dismiss } = usePwaUpdate()
   <!-- role="status" : annoncé poliment, sans interrompre comme le ferait une alerte -->
   <div v-if="visible" class="update-banner" role="status">
     <BaseText size="sm" weight="medium" color="primary" class="update-banner__text">
-      Une nouvelle version d'Abyss2 est disponible.
+      Une nouvelle version d'Abyss est disponible.
     </BaseText>
     <div class="update-banner__actions">
       <BaseButton variant="primary" size="sm" @click="update">Mettre à jour</BaseButton>
