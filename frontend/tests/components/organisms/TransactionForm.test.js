@@ -106,6 +106,23 @@ describe('TransactionForm — création', () => {
     w.unmount()
   })
 
+  it('une seule ligne d\'actions — création : Annuler puis Ajouter', () => {
+    const w = mount(TransactionForm)
+    expect(w.findAll('.transaction-form__actions button').map((b) => b.text())).toEqual(['Annuler', 'Ajouter'])
+  })
+
+  it('une seule ligne d\'actions — modification : Supprimer puis Enregistrer, sans Annuler (la croix suffit)', () => {
+    const w = mount(TransactionForm, { props: { transaction: TX } })
+    expect(w.findAll('.transaction-form__actions button').map((b) => b.text())).toEqual(['Supprimer', 'Enregistrer'])
+  })
+
+  it('montant et date côte à côte', () => {
+    const w = mount(TransactionForm)
+    const pair = w.find('.transaction-form__pair')
+    expect(pair.find('#transaction-amount').exists()).toBe(true)
+    expect(pair.find('#transaction-date').exists()).toBe(true)
+  })
+
   it('« Annuler » prévient le parent', async () => {
     const w = mountForm()
 
