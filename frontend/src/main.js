@@ -8,6 +8,12 @@ import { listenForInstall } from './composables/usePwaInstall.js'
 import { registerPwaUpdates } from './composables/usePwaUpdate.js'
 import '@/assets/styles/main.css'
 
+// Pas de zoom au pincement : iOS ignore `user-scalable=no` (index.html) depuis iOS 10, mais laisse
+// annuler ses événements `gesture*`, qui n'existent que sur Safari/WebKit — sans effet ailleurs.
+for (const type of ['gesturestart', 'gesturechange']) {
+  document.addEventListener(type, (event) => event.preventDefault(), { passive: false })
+}
+
 // Thème appliqué avant le montage pour éviter tout flash de couleur
 applyTheme(resolveInitialTheme())
 

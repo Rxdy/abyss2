@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   width: 100%;
   max-height: 92vh;
-  max-height: 92dvh;
+  max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - var(--space-4)));
   background: var(--color-bg-surface);
   border-top: 1px solid var(--color-border);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
