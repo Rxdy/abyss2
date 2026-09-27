@@ -28,11 +28,12 @@ Légende : 🔴 à traiter en premier · 🟠 important · 🟡 confort / polish
 - [X] **`BaseInput` transmet ses attributs au champ** : `inputmode="decimal"` (montants) et
   `autocomplete` arrivent sur l'`<input>` et non plus sur la `<div>` qui l'enveloppe — clavier
   numérique sur mobile pour les montants. Même correctif que `BaseSelect`
-- [X] **Déploiement continu sur meliodas** : job `deploy` de la CI (push sur `main`, après les trois
-  jobs de tests) → Tailscale éphémère `tag:ci` → SSH → dépôt placé sur le commit testé →
-  `scripts/deploy.sh` (pg_dump dans `backups/`, 14 gardées → `make up-prod` → attente de santé API +
-  front, logs si échec). Environnement GitHub `production`, un déploiement à la fois. Mise en place
-  unique décrite dans le README (« Déploiement continu »)
+- [X] **Déploiement continu sur meliodas** (abyss.rxdy.fr) : job `images` de la CI (push sur
+  `main`, après les trois jobs de tests) → images arm64 construites sur un runner ARM natif →
+  GHCR (`abyss-api`, `abyss-frontend`, tags `latest` + `<sha>`) → watchtower les installe sur le Pi.
+  Rien n'est construit sur le serveur (un build y avait fait tomber toutes les apps), pas de SSH
+  depuis la CI. Limites mémoire par conteneur, sauvegarde nocturne (`scripts/backup.sh`, cron),
+  `make deploy` pour un déploiement manuel. Nom affiché : « Abyss »
 - [X] **Mode de session au choix (Préférences)** : `users.session_mode` — « Rester connecté »
   (cookie persistant 30 j) ou « Connexion à chaque session » (cookie de session, effacé à la
   fermeture du navigateur, + 30 min d'inactivité). Dans les deux cas, renouvellement glissant dans

@@ -1,0 +1,28 @@
+# Image de production de l'API, construite par la CI (job « images ») et publiée sur GHCR —
+# jamais sur le serveur : un Raspberry Pi qui héberge d'autres apps n'a pas la marge pour un
+# `npm install` complet (voir README, « Déploiement continu »).
+#
+# Contrairement à Dockerfile (développement : dépendances de dev, `tsx watch`), celle-ci n'embarque
+# que les dépendances de production. tsx et prisma en font partie : tsx exécute le TypeScript au
+# démarrage (`npm start`), prisma applique les migrations juste avant (voir docker-compose.prod.yml).
+
+FROM node:20-alpine
+
+RUN apk add --no-cache openssl
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+COPY src ./src
+COPY assets ./assets
+COPY tsconfig.json ./
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

@@ -30,7 +30,7 @@ function onClick() {
 
   <ConfirmDialog
     v-if="showHelp"
-    title="Installer Abyss2"
+    title="Installer Abyss"
     confirm-label="J'ai compris"
     hide-cancel
     @confirm="showHelp = false"
@@ -38,7 +38,7 @@ function onClick() {
   >
     <p class="pwa-install__help">
       Dans Safari, touchez le bouton <strong>Partager</strong>, puis
-      <strong>Sur l'écran d'accueil</strong>. Abyss2 s'ouvrira ensuite comme
+      <strong>Sur l'écran d'accueil</strong>. Abyss s'ouvrira ensuite comme
       une application, sans barre d'adresse.
     </p>
   </ConfirmDialog>

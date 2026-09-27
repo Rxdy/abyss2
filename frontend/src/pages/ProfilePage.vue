@@ -30,7 +30,7 @@ async function exportData(format) {
   exporting.value = format
   exportError.value = ''
   try {
-    await api.download(`/api/user/export?format=${format}`, `abyss2-${todayISO()}.${format}`)
+    await api.download(`/api/user/export?format=${format}`, `abyss-${todayISO()}.${format}`)
   } catch (err) {
     exportError.value = err.message
   } finally {
