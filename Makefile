@@ -1,4 +1,4 @@
-.PHONY: help up down build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset user test test-front test-back test-db test-coverage pwa-build
+.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh deploy user seed test test-front test-back test-db test-coverage pwa-build
 
 # Variables
 COMPOSE := docker compose
@@ -14,7 +14,11 @@ help:
 	@echo ""
 	@echo "Core Commands:"
 	@echo "  make setup           - Create .env file (with generated secrets)"
-	@echo "  make up              - Start all services"
+	@echo "  make up              - Start all services (reachable from this machine only)"
+	@echo "  make up-lan          - Start all services open to the local network (phone testing)"
+	@echo "  make up-prod         - Production: build + start behind Traefik (needs DOMAIN in .env)"
+	@echo "  make down-prod       - Stop the production stack"
+	@echo "  make deploy          - On the server: backup DB, rebuild prod stack, wait until healthy"
 	@echo "  make down            - Stop all services"
 	@echo "  make build           - Build all Docker images"
 	@echo "  make restart         - Restart all services"
@@ -34,14 +38,19 @@ help:
 	@echo "  make postgres-logs   - View PostgreSQL logs"
 	@echo ""
 	@echo "Data:"
-	@echo "  make user            - Create a test account (test@abyss2.dev / password123)"
+	@echo "  make user            - Create empty test accounts (test@ / demo@abyss2.dev)"
+	@echo "  make seed            - Fill demo@abyss2.dev with 6 months of realistic data"
 	@echo "  make db-reset        - Reset database (remove all data)"
+	@echo "  make db-fresh        - Blank database + test accounts + demo data (db-reset, user, seed)"
 	@echo ""
 	@echo "Tests:"
 	@echo "  make test            - Run every test suite (front + back + db)"
 	@echo "  make test-front      - Vitest — components, stores, composables, pages"
 	@echo "  make test-back       - Vitest — API routes and crypto (Prisma mocked)"
 	@echo "  make test-db         - Vitest — real PostgreSQL schema and constraints"
+	@echo "  make lint            - ESLint (API + front) and TypeScript typecheck (API)"
+	@echo "  make test-e2e        - Playwright: real browser on the running stack (make up first)"
+	@echo "  make test-restore    - pg_dump -> blank DB from prisma migrate deploy -> same SQL tests"
 	@echo "  make test-coverage   - Coverage report for front and back"
 	@echo ""
 	@echo "PWA:"
@@ -55,6 +64,36 @@ up:
 	@echo "✓ Services started!"
 	@sleep 3
 	@make services
+
+# Ouvre l'API et le front au réseau local, pour tester depuis un téléphone : http://<IP de cette machine>:5174.
+# L'adresse est injectée dans CORS (API) et dans l'URL d'API du front. PostgreSQL reste local.
+up-lan:
+	@IP=$$(hostname -I | awk '{print $$1}'); \
+	echo "📱 Ouverture au réseau local sur $$IP"; \
+	LAN_ADDRESS=0.0.0.0 FRONTEND_URL=http://$$IP:5174 VITE_API_URL=http://$$IP:3002 \
+		$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d; \
+	echo "✓ Front : http://$$IP:5174   ·   API : http://$$IP:3002"
+
+# Pile de production : front buildé (nginx), API sans watcher ni volumes, les deux
+# derrière Traefik (voir docker-compose.prod.yml et sa notice). Aucun port publié sur l'hôte.
+PROD_COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml --env-file $(ENV_FILE)
+
+build-prod:
+	@$(PROD_COMPOSE) build
+
+up-prod: build-prod
+	@echo "🚀 Launching Abyss2 (production, behind Traefik)..."
+	@$(PROD_COMPOSE) up -d
+	@DOMAIN=$$(grep '^DOMAIN=' $(ENV_FILE) | cut -d= -f2); \
+		echo "✓ Déployé — vérifiez le routage sur https://$$DOMAIN"
+
+down-prod:
+	@$(PROD_COMPOSE) down
+
+# Sur le serveur de production : sauvegarde, build + relance, attente de santé (scripts/deploy.sh).
+# La CI l'appelle après chaque merge sur main ; utilisable à la main pour redéployer.
+deploy:
+	@./scripts/deploy.sh
 
 down:
 	@echo "🛑 Stopping Abyss2 services..."
@@ -140,22 +179,49 @@ db-reset:
 	@echo "⚠️  Resetting database..."
 	@$(COMPOSE) -f docker-compose.yml down -v postgres
 	@sleep 2
-	@$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d postgres
+	@# --wait : attend le healthcheck (pg_isready) — sans ça, les migrations partaient parfois avant que PostgreSQL accepte les connexions.
+	@$(COMPOSE) -f docker-compose.yml --env-file $(ENV_FILE) up -d --wait postgres
+	@echo "⏳ Applying migrations..."
+	@$(COMPOSE) -f docker-compose.yml exec -T api npx prisma migrate deploy
 	@echo "✓ Database reset completed!"
+
+# Repart de zéro et remet l'app dans un état « vivant » : base vierge, migrations, comptes de test,
+# compte de démo rempli. Le seed vérifie lui-même que les notifications attendues sont apparues —
+# si cette commande passe, toute la chaîne (schéma, API, chiffrement, charges fixes, notifications)
+# fonctionne sur une base neuve.
+db-fresh:
+	@$(COMPOSE) -f docker-compose.yml ps --status running --services 2>/dev/null | grep -qx api \
+		|| { echo "✗ L'API n'est pas démarrée — lancez d'abord : make up"; exit 1; }
+	@$(MAKE) --no-print-directory db-reset
+	@# Redémarrer l'API régénère le client Prisma (npm run dev) : sans ça, une colonne ajoutée au
+	@# schéma depuis le démarrage du conteneur est inconnue de l'API et le seed échoue.
+	@$(COMPOSE) -f docker-compose.yml restart api >/dev/null
+	@echo "⏳ Attente de l'API..."
+	@for i in $$(seq 1 30); do curl -sf $(API_URL)/health >/dev/null && break; sleep 1; done; \
+		curl -sf $(API_URL)/health >/dev/null || { echo "✗ L'API ne répond pas sur $(API_URL)/health"; exit 1; }
+	@$(MAKE) --no-print-directory user
+	@$(MAKE) --no-print-directory seed
+	@echo "✓ Base vierge remplie — $(FRONTEND_URL)/login"
 
 user:
 	@echo "👤 Création des comptes de test..."
 	@curl -s -X POST $(API_URL)/api/auth/register \
 		-H "Content-Type: application/json" \
-		-d '{"email":"test@abyss2.dev","password":"password123"}' | head -c 200
+		-d '{"email":"test@abyss2.dev","password":"Loutre-Marine_2026!"}' | head -c 200
 	@echo ""
 	@curl -s -X POST $(API_URL)/api/auth/register \
 		-H "Content-Type: application/json" \
-		-d '{"email":"demo@abyss2.dev","password":"demo1234"}' | head -c 200
+		-d '{"email":"demo@abyss2.dev","password":"Tirelire_Abyss-99"}' | head -c 200
 	@echo ""
-	@echo "  test@abyss2.dev / password123"
-	@echo "  demo@abyss2.dev / demo1234"
+	@echo "  test@abyss2.dev / Loutre-Marine_2026!"
+	@echo "  demo@abyss2.dev / Tirelire_Abyss-99"
 	@echo "  → $(FRONTEND_URL)/login"
+
+seed:
+	@echo "🌱 Remplissage du compte de démo..."
+	@$(COMPOSE) -f docker-compose.yml ps --status running --services 2>/dev/null | grep -qx api \
+		|| { echo "✗ L'API n'est pas démarrée — lancez d'abord : make up"; exit 1; }
+	@$(COMPOSE) -f docker-compose.yml exec -T api npx tsx scripts/seed-demo.ts
 
 # Tests
 test:
@@ -174,6 +240,24 @@ test-front:
 test-db:
 	@echo "🧪 Tests base de données (PostgreSQL réel)..."
 	@$(COMPOSE) -f docker-compose.yml exec -T api npm run test:db
+
+lint:
+	@echo "🔎 Typage API (tsc)..."
+	@$(COMPOSE) -f docker-compose.yml exec -T api npm run --silent typecheck
+	@echo "🔎 ESLint API..."
+	@$(COMPOSE) -f docker-compose.yml exec -T api npm run --silent lint
+	@echo "🔎 ESLint front..."
+	@$(COMPOSE) -f docker-compose.yml exec -T frontend npm run --silent lint
+	@echo "✓ Aucun problème"
+
+# Parcours complets dans un vrai navigateur (mobile + ordinateur) contre la pile qui tourne.
+# Chaque test crée son compte et le supprime ; la première fois : `cd e2e && npm install`.
+test-e2e:
+	@curl -fsS $(API_URL)/health >/dev/null 2>&1 || { echo "✗ L'API ne répond pas — lancez d'abord : make up"; exit 1; }
+	@cd e2e && { [ -d node_modules ] || npm install --silent; } && npx playwright test
+
+test-restore:
+	@./scripts/test-restore.sh
 
 test-coverage:
 	@$(COMPOSE) -f docker-compose.yml exec -T api npm run test:coverage
