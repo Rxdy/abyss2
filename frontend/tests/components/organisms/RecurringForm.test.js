@@ -36,6 +36,8 @@ describe('RecurringForm — validation', () => {
 
     expect(w.find('#recurring-title').element.value).toBe('')
     expect(w.find('#recurring-day').element.value).toBe('1')
+    // Pavé numérique sur téléphone, pas le clavier complet.
+    expect(w.find('#recurring-day').attributes('inputmode')).toBe('numeric')
     expect(w.find('#recurring-start').element.value).toBe(todayISO())
     expect(w.find('#recurring-end').element.value).toBe('')
   })

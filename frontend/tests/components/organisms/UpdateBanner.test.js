@@ -2,10 +2,10 @@
  * Tests composant — UpdateBanner
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import UpdateBanner from '@/components/organisms/UpdateBanner.vue'
-import { registerPwaUpdates, resetPwaUpdate } from '@/composables/usePwaUpdate.js'
+import { AUTO_APPLY_WINDOW_MS, registerPwaUpdates, resetPwaUpdate } from '@/composables/usePwaUpdate.js'
 
 let callbacks
 let updateSW
@@ -13,8 +13,13 @@ let updateSW
 beforeEach(() => {
   resetPwaUpdate()
   updateSW = vi.fn()
+  vi.useFakeTimers()
   registerPwaUpdates((cb) => { callbacks = cb; return updateSW })
+  // Le bandeau ne concerne qu'une version arrivée en cours d'utilisation : juste après l'ouverture,
+  // elle s'installe d'office (voir usePwaUpdate).
+  vi.advanceTimersByTime(AUTO_APPLY_WINDOW_MS)
 })
+afterEach(() => vi.useRealTimers())
 
 const button = (w, label) => w.findAll('button').find((b) => b.text() === label)
 
