@@ -162,3 +162,39 @@ describe('useApi — download', () => {
     click.mockRestore()
   })
 })
+
+describe('useApi — session tombée', () => {
+  function signedIn() {
+    const auth = useAuthStore()
+    auth.setSession({ csrfToken: 'csrf', user: { id: 'u1', email: 'a@b.c' } })
+    return auth
+  }
+
+  it.each(['UNAUTHORIZED', 'TOKEN_REVOKED', 'USER_NOT_FOUND'])('401 %s : ferme la session et le signale', async (code) => {
+    const auth = signedIn()
+    mockFetch({ error: 'Session expirée — reconnectez-vous.', code }, { ok: false, status: 401 })
+
+    await expect(useApi().get('/api/transactions')).rejects.toThrow('Session expirée')
+
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.sessionExpired).toBe(true)
+  })
+
+  it('401 « mot de passe incorrect » : la session reste ouverte', async () => {
+    const auth = signedIn()
+    mockFetch({ error: 'Mot de passe actuel incorrect.', code: 'INVALID_CREDENTIALS' }, { ok: false, status: 401 })
+
+    await expect(useApi().put('/api/user/password', {})).rejects.toThrow('incorrect')
+
+    expect(auth.isAuthenticated).toBe(true)
+    expect(auth.sessionExpired).toBe(false)
+  })
+
+  it('pas connecté (ex. login refusé) : rien à fermer, rien à signaler', async () => {
+    mockFetch({ error: 'Token manquant ou invalide.', code: 'UNAUTHORIZED' }, { ok: false, status: 401 })
+
+    await expect(useApi().get('/api/user')).rejects.toThrow()
+
+    expect(useAuthStore().sessionExpired).toBe(false)
+  })
+})

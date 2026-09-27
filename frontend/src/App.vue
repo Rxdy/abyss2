@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import AuthLayout    from '@/layouts/AuthLayout.vue'
@@ -24,18 +24,25 @@ async function validateSession() {
     const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
     const res = await fetch(`${BASE_URL}/api/user`, { credentials: 'include' })
     if (res.status === 401 || res.status === 403) {
-      await authStore.logout()
-      router.push({ name: 'login' })
+      await authStore.expireSession()
       return
     }
     if (res.ok) {
       const data = await res.json()
-      authStore.setSession({ user: { id: data.id, email: data.email }, csrfToken: data.csrfToken })
+      authStore.setSession({
+        user: { id: data.id, email: data.email, currency: data.currency, sessionMode: data.sessionMode },
+        csrfToken: data.csrfToken,
+      })
     }
   } catch {
     // Pas de réseau → on laisse l'utilisateur, la redirection se fera si une requête échoue
   }
 }
+
+// Session tombée en cours de route (voir useApi / auth.expireSession) : retour au login, qui explique.
+watch(() => authStore.sessionExpired, (expired) => {
+  if (expired && route.name !== 'login') router.push({ name: 'login' })
+})
 
 onMounted(async () => {
   appStore.initTheme()

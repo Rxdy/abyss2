@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs'
 import type { FastifyInstance } from 'fastify'
-import { decryptEmail, decryptValue, encryptValue } from '../utils/crypto.js'
+import { decryptEmail, decryptValue, encryptEmail, encryptValue, hashEmail } from '../utils/crypto.js'
+import { CURRENCIES } from '../utils/currency.js'
 import { centsToDecimal, toCsv } from '../utils/csv.js'
 import { evaluatePassword, weakPasswordMessage } from '../utils/passwordStrength.js'
-import { clearSession, issueSession } from '../utils/session.js'
-import { BCRYPT_ROUNDS, DEFAULT_CATEGORIES } from './auth.js'
+import { clearSession, issueSession, SESSION_MODES, type SessionMode } from '../utils/session.js'
+import { BCRYPT_ROUNDS, DEFAULT_CATEGORIES, trimEmail } from './auth.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { TITLE_USAGE, AMOUNT_USAGE } from './transactions.js'
 
@@ -42,6 +43,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
             id:        { type: 'string', format: 'uuid' },
             email:     { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
+            currency:  { type: 'string', description: 'Devise d\'affichage choisie dans les Préférences' },
+            sessionMode: { type: 'string', enum: ['persistent', 'strict'], description: 'Rester connecté, ou connexion à chaque session' },
             csrfToken: { type: 'string', description: 'À renvoyer dans l\'en-tête X-CSRF-Token sur toute requête qui modifie des données' },
           },
         },
@@ -55,7 +58,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const user = await fastify.prisma.user.findUnique({
       where:  { id: req.user.userId },
-      select: { id: true, emailEncrypted: true, createdAt: true },
+      select: { id: true, emailEncrypted: true, createdAt: true, currency: true, sessionMode: true },
     })
 
     if (!user) {
@@ -69,6 +72,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
       id:        user.id,
       email:     decryptEmail(user.emailEncrypted),
       createdAt: user.createdAt,
+      currency:  user.currency,
+      sessionMode: user.sessionMode,
       // Un appel de plus, mais GET /api/user tourne déjà à chaque démarrage de l'app (validation de
       // session) : c'est l'endroit naturel pour (re)donner un jeton CSRF après un rechargement de page.
       csrfToken: reply.generateCsrf(),
@@ -157,6 +162,140 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.code(200).send({ reset: true })
   })
 
+  // ── PUT /api/user/preferences ───────────────────────────
+  // Préférences liées au compte (valables sur tous les appareils) — le thème, lui, reste propre à
+  // chaque appareil (localStorage). Devise d'affichage, et mode de session (voir utils/session.ts) :
+  // en changer ré-émet la session de cet appareil selon le nouveau mode ; passer en « connexion à
+  // chaque session » déconnecte en plus les autres appareils, qui gardaient un cookie de 30 jours.
+  fastify.put<{ Body: { currency?: string; sessionMode?: SessionMode } }>('/api/user/preferences', {
+    schema: {
+      summary: 'Changer ses préférences de compte (devise, mode de session)',
+      tags: ['user'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        minProperties: 1,
+        properties: {
+          currency:    { type: 'string', enum: [...CURRENCIES] },
+          sessionMode: { type: 'string', enum: [...SESSION_MODES] },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            currency:    { type: 'string' },
+            sessionMode: { type: 'string' },
+            csrfToken:   { type: 'string', description: 'Présent si la session a été ré-émise (mode de session changé)' },
+          },
+        },
+        400: errorSchema,
+        401: errorSchema,
+      },
+    },
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
+    const { currency, sessionMode } = req.body
+
+    const before = await fastify.prisma.user.findUnique({
+      where:  { id: req.user.userId },
+      select: { sessionMode: true, emailEncrypted: true },
+    })
+    if (!before) return reply.code(401).send({ error: 'Utilisateur introuvable.', code: 'USER_NOT_FOUND' })
+
+    const modeChanged = sessionMode !== undefined && sessionMode !== before.sessionMode
+
+    const user = await fastify.prisma.user.update({
+      where:  { id: req.user.userId },
+      data:   {
+        ...(currency !== undefined && { currency }),
+        ...(modeChanged && { sessionMode }),
+        ...(modeChanged && sessionMode === 'strict' && { tokenVersion: { increment: 1 } }),
+      },
+      select: { id: true, currency: true, sessionMode: true, tokenVersion: true },
+    })
+
+    if (!modeChanged) return { currency: user.currency, sessionMode: user.sessionMode }
+
+    const { csrfToken } = issueSession(fastify, reply, {
+      id: user.id, email: decryptEmail(before.emailEncrypted), tokenVersion: user.tokenVersion, sessionMode: user.sessionMode,
+    })
+    return { currency: user.currency, sessionMode: user.sessionMode, csrfToken }
+  })
+
+  // ── PUT /api/user/email ─────────────────────────────────
+  // Change l'adresse de connexion. Le mot de passe est redemandé (une session volée ne suffit pas à
+  // détourner le compte), et comme pour le mot de passe, les autres appareils sont déconnectés : la
+  // session de CET appareil est ré-émise avec le nouvel email.
+  fastify.put<{ Body: { email: string; password: string } }>('/api/user/email', {
+    preValidation: trimEmail,
+    schema: {
+      summary: 'Changer l\'adresse email du compte (déconnecte les autres appareils)',
+      tags: ['user'],
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['email', 'password'],
+        properties: {
+          email:    { type: 'string', format: 'email', maxLength: 254 },
+          password: { type: 'string' },
+        },
+      },
+      response: {
+        200: { type: 'object', properties: { email: { type: 'string' }, csrfToken: { type: 'string' } } },
+        400: errorSchema,
+        401: errorSchema,
+        409: errorSchema,
+      },
+    },
+    preHandler: [fastify.authenticate, fastify.csrfIfCookie],
+  }, async (req, reply) => {
+    const user = await fastify.prisma.user.findUnique({
+      where:  { id: req.user.userId },
+      select: { id: true, emailHash: true, passwordHash: true },
+    })
+
+    if (!user) {
+      return reply.code(401).send({ error: 'Utilisateur introuvable.', code: 'USER_NOT_FOUND' })
+    }
+
+    if (!(await bcrypt.compare(req.body.password, user.passwordHash))) {
+      return reply.code(401).send({ error: 'Mot de passe incorrect.', code: 'INVALID_CREDENTIALS' })
+    }
+
+    const cleanEmail = req.body.email.toLowerCase().trim()
+    const emailHash  = hashEmail(cleanEmail)
+
+    if (emailHash === user.emailHash) {
+      return reply.code(400).send({ error: 'C\'est déjà l\'adresse de ce compte.', code: 'SAME_EMAIL' })
+    }
+
+    const taken = { error: 'Cette adresse email est déjà utilisée.', code: 'EMAIL_ALREADY_EXISTS' }
+    if (await fastify.prisma.user.findUnique({ where: { emailHash }, select: { id: true } })) {
+      return reply.code(409).send(taken)
+    }
+
+    let updated
+    try {
+      updated = await fastify.prisma.user.update({
+        where:  { id: user.id },
+        data:   { emailHash, emailEncrypted: encryptEmail(cleanEmail), tokenVersion: { increment: 1 } },
+        select: { tokenVersion: true, sessionMode: true },
+      })
+    } catch (err) {
+      // Deux comptes qui visent la même adresse au même moment : l'index unique tranche.
+      if (err instanceof Error && (err as { code?: string }).code === 'P2002') return reply.code(409).send(taken)
+      throw err
+    }
+
+    const { csrfToken } = issueSession(fastify, reply, {
+      id: user.id, email: cleanEmail, tokenVersion: updated.tokenVersion, sessionMode: updated.sessionMode,
+    })
+
+    return reply.code(200).send({ email: cleanEmail, csrfToken })
+  })
+
   // ── PUT /api/user/password ──────────────────────────────
   // Change le mot de passe et invalide toutes les autres sessions (jeton
   // ré-émis pour l'appareil courant, qui reste donc connecté).
@@ -212,7 +351,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const updated = await fastify.prisma.user.update({
       where: { id: user.id },
       data:  { passwordHash, tokenVersion: { increment: 1 } },
-      select: { tokenVersion: true },
+      select: { tokenVersion: true, sessionMode: true },
     })
 
     // Ré-émet la session pour CET appareil (nouveau tokenVersion) : il reste connecté, les autres
@@ -221,6 +360,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
       id: user.id,
       email: decryptEmail(user.emailEncrypted),
       tokenVersion: updated.tokenVersion,
+      sessionMode: updated.sessionMode,
     })
 
     return reply.code(200).send({ csrfToken })
@@ -248,7 +388,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const [user, categoryRows, transactionRows, recurringRows] = await Promise.all([
       fastify.prisma.user.findUnique({
         where:  { id: userId },
-        select: { emailEncrypted: true, createdAt: true },
+        select: { emailEncrypted: true, createdAt: true, currency: true },
       }),
       fastify.prisma.category.findMany({ where: { userId }, orderBy: { position: 'asc' } }),
       fastify.prisma.transaction.findMany({ where: { userId }, orderBy: { date: 'desc' } }),
@@ -306,6 +446,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
       account: {
         email:     decryptEmail(user.emailEncrypted),
         createdAt: user.createdAt,
+        currency:  user.currency,
       },
       // Montants en centimes, comme dans l'API.
       categories,

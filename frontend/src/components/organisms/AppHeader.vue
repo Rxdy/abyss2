@@ -5,7 +5,6 @@ import BaseText    from '@/components/atoms/BaseText.vue'
 import BaseIcon    from '@/components/atoms/BaseIcon.vue'
 import IconButton  from '@/components/atoms/IconButton.vue'
 import AppLogo     from '@/components/atoms/AppLogo.vue'
-import ThemeToggle from '@/components/organisms/ThemeToggle.vue'
 import PwaInstallButton  from '@/components/organisms/PwaInstallButton.vue'
 import NotificationBell  from '@/components/organisms/NotificationBell.vue'
 import AppNavbar   from '@/components/organisms/AppNavbar.vue'
@@ -34,7 +33,6 @@ async function logout() {
     <div class="app-header__actions">
       <PwaInstallButton />
       <NotificationBell />
-      <ThemeToggle />
       <IconButton
         class="app-header__logout"
         variant="outline"

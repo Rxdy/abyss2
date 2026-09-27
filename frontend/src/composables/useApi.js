@@ -3,6 +3,12 @@ import { useAuthStore } from '@/stores/auth.store.js'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3002'
 
+/**
+ * Codes d'un 401 qui signifient « plus de session » (jeton absent, expiré ou révoqué, compte
+ * disparu) — à distinguer d'un 401 « mot de passe actuel incorrect », qui ne doit pas déconnecter.
+ */
+const SESSION_LOST = new Set(['UNAUTHORIZED', 'TOKEN_REVOKED', 'USER_NOT_FOUND'])
+
 /** Méthodes qui modifient des données : seules elles exigent le jeton CSRF (voir useApi ci-dessous). */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH'])
 
@@ -33,6 +39,8 @@ export function useApi() {
       // écraser ceux calculés ci-dessus (Content-Type, X-CSRF-Token).
       const res  = await fetch(`${BASE_URL}${path}`, { ...options, headers, credentials: 'include' })
       const data = await res.json()
+      // Session tombée (expirée, révoquée ailleurs) : on la ferme proprement — App.vue renvoie au login.
+      if (res.status === 401 && SESSION_LOST.has(data?.code) && auth.isAuthenticated) await auth.expireSession()
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`)
       return data
     } catch (e) {

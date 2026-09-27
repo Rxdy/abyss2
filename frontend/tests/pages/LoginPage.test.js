@@ -161,3 +161,20 @@ describe('LoginPage — échec', () => {
     expect(w.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('LoginPage — session expirée', () => {
+  it('explique pourquoi on est revenu au login, jusqu\'à la reconnexion', async () => {
+    useAuthStore().sessionExpired = true
+    const w = mount(LoginPage)
+
+    expect(w.text()).toContain('Votre session a expiré')
+
+    useAuthStore().setSession({ user: { id: 'u1', email: 'a@b.c' } })
+    await flushPromises()
+    expect(w.text()).not.toContain('Votre session a expiré')
+  })
+
+  it('arrivée normale : pas de message', () => {
+    expect(mount(LoginPage).text()).not.toContain('Votre session a expiré')
+  })
+})

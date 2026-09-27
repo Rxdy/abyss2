@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { setCurrency } from '@/utils/format.js'
 
 // Le jeton de session ne vit plus que dans un cookie httpOnly (voir backend/src/utils/session.ts) :
 // illisible en JavaScript, donc rien à stocker ici pour authentifier les requêtes — le navigateur
@@ -22,13 +23,21 @@ function loadUser() {
 }
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    hasSession: localStorage.getItem(HAS_SESSION_KEY) === '1',
-    user: loadUser(),
+  state: () => {
+    const user = loadUser()
+    // Devise du dernier compte connu, dès le démarrage : pas d'affichage en euros le temps que
+    // App.vue revalide la session.
+    setCurrency(user?.currency)
+    return {
+      hasSession: localStorage.getItem(HAS_SESSION_KEY) === '1',
+      user,
     // Jeton CSRF : seulement en mémoire, jamais persisté. Il redevient inutile après un rechargement
     // de toute façon (App.vue en redemande un frais via GET /api/user au démarrage).
-    csrfToken: null,
-  }),
+      csrfToken: null,
+      /** La dernière session s'est terminée d'elle-même (expirée, révoquée) : le login l'explique. */
+      sessionExpired: false,
+    }
+  },
 
   getters: {
     isAuthenticated: (state) => state.hasSession,
@@ -41,14 +50,27 @@ export const useAuthStore = defineStore('auth', {
      */
     setSession({ user, csrfToken } = {}) {
       this.hasSession = true
+      this.sessionExpired = false
       localStorage.setItem(HAS_SESSION_KEY, '1')
       if (user !== undefined) {
         this.user = user
         localStorage.setItem(USER_KEY, JSON.stringify(user))
+        setCurrency(user?.currency)
       }
       if (csrfToken !== undefined) {
         this.csrfToken = csrfToken
       }
+    },
+
+    /** Met à jour une partie du compte connu (email changé, devise choisie) sans toucher à la session. */
+    updateUser(patch) {
+      this.setSession({ user: { ...this.user, ...patch } })
+    },
+
+    /** Session terminée côté serveur (expirée, révoquée) : même nettoyage qu'une déconnexion, signalé. */
+    async expireSession() {
+      await this.logout()
+      this.sessionExpired = true
     },
 
     /** Renouvelle juste le jeton CSRF (mot de passe changé : nouvelle session, même appareil, on reste connecté). */
@@ -70,6 +92,7 @@ export const useAuthStore = defineStore('auth', {
         this.csrfToken  = null
         localStorage.removeItem(HAS_SESSION_KEY)
         localStorage.removeItem(USER_KEY)
+        setCurrency('EUR')
       }
     },
   },

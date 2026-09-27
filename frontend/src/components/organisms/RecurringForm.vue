@@ -14,7 +14,7 @@ import { useDirtyForm }        from '@/composables/useDirtyForm.js'
 import { useCategoriesStore } from '@/stores/categories.store.js'
 import { useRecurringStore }  from '@/stores/recurring.store.js'
 import { useToastStore }      from '@/stores/toast.store.js'
-import { parseAmountToCents, todayISO } from '@/utils/format.js'
+import { parseAmountToCents, todayISO, currencySymbol } from '@/utils/format.js'
 
 const props = defineProps({
   item: { type: Object, default: null },
@@ -115,7 +115,7 @@ async function submit() {
     <BaseInput
       v-model="form.amount"
       id="recurring-amount"
-      label="Montant (€)"
+      :label="`Montant (${currencySymbol()})`"
       placeholder="42,50"
       inputmode="decimal"
       :error="errors.amount"

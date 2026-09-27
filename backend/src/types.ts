@@ -13,6 +13,8 @@ export interface AuthPayload {
   userId: string
   email?: string
   tv?: number
+  /** Date d'émission (secondes), posée par @fastify/jwt — sert au renouvellement glissant. */
+  iat?: number
 }
 
 declare module '@fastify/jwt' {
