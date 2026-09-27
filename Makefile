@@ -1,4 +1,4 @@
-.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh user seed test test-front test-back test-db test-coverage pwa-build
+.PHONY: help up up-lan down lint test-e2e test-restore build logs services restart clean ps api api-logs frontend frontend-logs postgres postgres-logs setup db-reset db-fresh deploy user seed test test-front test-back test-db test-coverage pwa-build
 
 # Variables
 COMPOSE := docker compose
@@ -18,6 +18,7 @@ help:
 	@echo "  make up-lan          - Start all services open to the local network (phone testing)"
 	@echo "  make up-prod         - Production: build + start behind Traefik (needs DOMAIN in .env)"
 	@echo "  make down-prod       - Stop the production stack"
+	@echo "  make deploy          - On the server: backup DB, rebuild prod stack, wait until healthy"
 	@echo "  make down            - Stop all services"
 	@echo "  make build           - Build all Docker images"
 	@echo "  make restart         - Restart all services"
@@ -88,6 +89,11 @@ up-prod: build-prod
 
 down-prod:
 	@$(PROD_COMPOSE) down
+
+# Sur le serveur de production : sauvegarde, build + relance, attente de santé (scripts/deploy.sh).
+# La CI l'appelle après chaque merge sur main ; utilisable à la main pour redéployer.
+deploy:
+	@./scripts/deploy.sh
 
 down:
 	@echo "🛑 Stopping Abyss2 services..."
