@@ -20,6 +20,7 @@ import { todayISO } from '../utils/date.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { TITLE_USAGE, AMOUNT_USAGE, assertCategoryOwned } from './transactions.js'
 import { runDueRecurring, nextOccurrenceDate } from '../utils/recurring.js'
+import { dateBeforeAccountError, earliestDateFor } from '../utils/earliest-date.js'
 
 const TYPES = ['expense', 'income']
 
@@ -150,6 +151,12 @@ export default async function recurringRoutes(fastify: FastifyInstance) {
       active = true, startDate, endDate = null,
     } = req.body
 
+    // Une charge fixe démarrée avant le compte générerait des échéances antérieures à sa création.
+    if (startDate) {
+      const earliest = await earliestDateFor(fastify.prisma, req.user.userId)
+      if (earliest && startDate < earliest) return reply.code(400).send(dateBeforeAccountError(earliest))
+    }
+
     if (!(await assertCategoryOwned(fastify, req.user.userId, categoryId))) {
       return reply.code(400).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })
     }
@@ -224,6 +231,11 @@ export default async function recurringRoutes(fastify: FastifyInstance) {
     }
 
     const { title, amount, type, dayOfMonth, categoryId, note, active, startDate, endDate } = req.body
+
+    if (startDate !== undefined && startDate !== formatDate(existing.startDate)) {
+      const earliest = await earliestDateFor(fastify.prisma, req.user.userId)
+      if (earliest && startDate < earliest) return reply.code(400).send(dateBeforeAccountError(earliest))
+    }
 
     if (categoryId !== undefined && !(await assertCategoryOwned(fastify, req.user.userId, categoryId))) {
       return reply.code(400).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })

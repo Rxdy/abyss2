@@ -25,6 +25,7 @@ async function makeFakeUser(email: string, password: string) {
     id:             'uuid-test-user',
     emailEncrypted: encryptEmail(email),
     passwordHash:   await bcrypt.hash(password, 4), // rounds faibles = tests rapides
+    createdAt:      new Date('2026-10-11T08:00:00.000Z'),
   }
 }
 
@@ -215,7 +216,8 @@ describe('POST /api/auth/login', () => {
     expect(res.statusCode).toBe(200)
     const body = res.json()
     expect(body.token).toBeUndefined() // plus jamais dans le corps de la réponse
-    expect(body.user).toEqual({ id: 'uuid-test-user', email: 'alice@example.com' })
+    // earliestDate : le 1er du mois de création du compte (11 octobre → 1er octobre)
+    expect(body.user).toEqual({ id: 'uuid-test-user', email: 'alice@example.com', earliestDate: '2026-10-01' })
     expect(typeof body.csrfToken).toBe('string')
     expect(body.csrfToken.length).toBeGreaterThan(0)
 

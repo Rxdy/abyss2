@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { todayISO, currentMonthKey } from '../src/utils/date.js'
+import { todayISO, currentMonthKey, earliestTransactionDate } from '../src/utils/date.js'
 
 describe('todayISO', () => {
   it('en journée, la date UTC et la date de Paris coïncident', () => {
@@ -31,5 +31,15 @@ describe('currentMonthKey', () => {
 
   it('bascule d\'année à la Saint-Sylvestre', () => {
     expect(currentMonthKey(new Date('2026-12-31T23:30:00Z'), 'Europe/Paris')).toBe('2027-01')
+  })
+})
+
+describe('earliestTransactionDate', () => {
+  it('renvoie le 1er du mois de création du compte', () => {
+    expect(earliestTransactionDate(new Date('2026-10-11T08:00:00.000Z'), 'Europe/Paris')).toBe('2026-10-01')
+  })
+
+  it('suit le fuseau de l\'application : 30 sept. 23 h 30 UTC, c\'est déjà octobre à Paris', () => {
+    expect(earliestTransactionDate(new Date('2026-09-30T23:30:00.000Z'), 'Europe/Paris')).toBe('2026-10-01')
   })
 })

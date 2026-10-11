@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import type { FastifyInstance } from 'fastify'
 import { decryptEmail, decryptValue, encryptEmail, encryptValue, hashEmail } from '../utils/crypto.js'
 import { CURRENCIES } from '../utils/currency.js'
+import { earliestTransactionDate } from '../utils/date.js'
 import { centsToDecimal, toCsv } from '../utils/csv.js'
 import { evaluatePassword, weakPasswordMessage } from '../utils/passwordStrength.js'
 import { clearSession, issueSession, SESSION_MODES, type SessionMode } from '../utils/session.js'
@@ -72,6 +73,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
             id:        { type: 'string', format: 'uuid' },
             email:     { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
+            earliestDate: { type: 'string', format: 'date', description: 'Date la plus ancienne autorisée pour une transaction : le 1er du mois de création du compte' },
             currency:  { type: 'string', description: 'Devise d\'affichage choisie dans les Préférences' },
             sessionMode: { type: 'string', enum: ['persistent', 'strict'], description: 'Rester connecté, ou connexion à chaque session' },
             csrfToken: { type: 'string', description: 'À renvoyer dans l\'en-tête X-CSRF-Token sur toute requête qui modifie des données' },
@@ -101,6 +103,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
       id:        user.id,
       email:     decryptEmail(user.emailEncrypted),
       createdAt: user.createdAt,
+      earliestDate: earliestTransactionDate(user.createdAt),
       currency:  user.currency,
       sessionMode: user.sessionMode,
       // Un appel de plus, mais GET /api/user tourne déjà à chaque démarrage de l'app (validation de

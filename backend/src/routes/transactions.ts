@@ -19,6 +19,7 @@ import { currentMonthKey } from '../utils/date.js'
 import { CATEGORY_USAGE } from './categories.js'
 import { runDueRecurring } from '../utils/recurring.js'
 import { notifyAfterChange, type TransactionImpact } from '../utils/notifications.js'
+import { dateBeforeAccountError, earliestDateFor } from '../utils/earliest-date.js'
 
 const TITLE_USAGE  = 'transaction-title'
 const AMOUNT_USAGE = 'transaction-amount'
@@ -306,6 +307,9 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const { title, amount, date, type = 'expense', categoryId = null, note = null } = req.body
 
+    const earliest = await earliestDateFor(fastify.prisma, req.user.userId)
+    if (earliest && date < earliest) return reply.code(400).send(dateBeforeAccountError(earliest))
+
     if (!(await assertCategoryOwned(fastify, req.user.userId, categoryId))) {
       return reply.code(400).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })
     }
@@ -364,6 +368,12 @@ export default async function transactionRoutes(fastify: FastifyInstance) {
     }
 
     const { title, amount, date, type, categoryId, note } = req.body
+
+    // Seule une date qui change est contrôlée : une transaction déjà antérieure reste modifiable.
+    if (date !== undefined && date !== formatDate(existing.date)) {
+      const earliest = await earliestDateFor(fastify.prisma, req.user.userId)
+      if (earliest && date < earliest) return reply.code(400).send(dateBeforeAccountError(earliest))
+    }
 
     if (categoryId !== undefined && !(await assertCategoryOwned(fastify, req.user.userId, categoryId))) {
       return reply.code(400).send({ error: 'Catégorie introuvable.', code: 'CATEGORY_NOT_FOUND' })
