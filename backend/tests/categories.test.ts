@@ -348,7 +348,9 @@ describe('budget mensuel', () => {
       expect(res.statusCode).toBe(201)
       expect(res.json().budget).toBe(40000)
       const { data } = mockPrisma.category.create.mock.calls[0][0]
-      expect(data.budgetEncrypted).not.toContain('40000')
+      // Forme AES-256-GCM (iv:tag:données, en hex) plutôt que « ne contient pas 40000 » : un texte
+      // chiffré aléatoire en hex contient parfois ces chiffres par hasard (test instable).
+      expect(data.budgetEncrypted).toMatch(/^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/)
       expect(decryptValue(data.budgetEncrypted, BUDGET_USAGE)).toBe('40000')
     })
 

@@ -17,6 +17,8 @@ import { useTransactionsStore } from '@/stores/transactions.store.js'
 import { useCategoriesStore }   from '@/stores/categories.store.js'
 import { useCoinDropStore }     from '@/stores/coinDrop.store.js'
 import { useToastStore }        from '@/stores/toast.store.js'
+import { useAuthStore }         from '@/stores/auth.store.js'
+import { minEntryDate, tooEarlyMessage } from '@/utils/entryDate.js'
 import { currencySymbol, parseAmountToCents, todayISO } from '@/utils/format.js'
 
 const props = defineProps({
@@ -30,6 +32,7 @@ const transactions = useTransactionsStore()
 const categories   = useCategoriesStore()
 const coinDrop      = useCoinDropStore()
 const toasts       = useToastStore()
+const auth         = useAuthStore()
 
 const isEdit = computed(() => !!props.transaction)
 
@@ -46,13 +49,16 @@ function initialForm() {
 }
 
 const form    = ref(initialForm())
-const errors  = ref({ title: '', amount: '', global: '' })
+const errors  = ref({ title: '', amount: '', date: '', global: '' })
+
+// Pas de date avant le mois de création du compte (voir utils/entryDate.js)
+const minDate = computed(() => minEntryDate(auth.user?.earliestDate, props.transaction?.date))
 const loading = ref(false)
 
 useDirtyForm(form)
 
 function validate() {
-  errors.value = { title: '', amount: '', global: '' }
+  errors.value = { title: '', amount: '', date: '', global: '' }
   let ok = true
 
   if (!form.value.title.trim()) {
@@ -61,6 +67,10 @@ function validate() {
   }
   if (parseAmountToCents(form.value.amount) === null) {
     errors.value.amount = 'Montant invalide (ex : 42,50).'
+    ok = false
+  }
+  if (minDate.value && form.value.date < minDate.value) {
+    errors.value.date = tooEarlyMessage(auth.user.earliestDate)
     ok = false
   }
   return ok
@@ -147,6 +157,8 @@ async function remove() {
         id="transaction-date"
         type="date"
         label="Date"
+        :min="minDate"
+        :error="errors.date"
         required
       />
     </div>

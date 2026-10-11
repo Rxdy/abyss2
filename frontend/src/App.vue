@@ -30,7 +30,7 @@ async function validateSession() {
     if (res.ok) {
       const data = await res.json()
       authStore.setSession({
-        user: { id: data.id, email: data.email, currency: data.currency, sessionMode: data.sessionMode },
+        user: { id: data.id, email: data.email, currency: data.currency, sessionMode: data.sessionMode, earliestDate: data.earliestDate },
         csrfToken: data.csrfToken,
       })
     }

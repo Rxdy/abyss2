@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildDemoData, DEMO_BUDGETS, DEMO_ENVELOPES, HISTORY_MONTHS } from '../scripts/demo-data.js'
+import { buildDemoData, demoAccountCreatedAt, DEMO_BUDGETS, DEMO_ENVELOPES, HISTORY_MONTHS } from '../scripts/demo-data.js'
+import { earliestTransactionDate } from '../src/utils/date.js'
 import { DEFAULT_CATEGORIES } from '../src/routes/auth.js'
 
 const NOW = new Date('2026-09-20T10:00:00Z')
@@ -126,3 +127,15 @@ describe('buildDemoData', () => {
   })
 })
 
+
+describe('demoAccountCreatedAt', () => {
+  it('antidate le compte avant tout l\'historique : aucune date refusée par la règle du mois de création', () => {
+    const now = new Date('2026-10-11T08:00:00.000Z')
+    const earliest = earliestTransactionDate(demoAccountCreatedAt(now))
+    const data = buildDemoData(now)
+    const dates = [...data.transactions.map((t) => t.date), ...data.recurring.map((r) => r.startDate)]
+
+    expect(earliest).toBe('2026-05-01')
+    expect(dates.every((date) => date >= earliest)).toBe(true)
+  })
+})

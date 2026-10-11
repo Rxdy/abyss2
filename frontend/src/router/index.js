@@ -85,6 +85,12 @@ const routes = [
     meta: { layout: 'default', title: 'Enveloppes', requiresAuth: true }
   },
   {
+    path: '/profile/support',
+    name: 'support',
+    component: () => import('@/pages/SupportPage.vue'),
+    meta: { layout: 'default', title: 'Support', requiresAuth: true }
+  },
+  {
     path: '/recurring',
     name: 'recurring',
     component: () => import('@/pages/RecurringPage.vue'),
@@ -103,10 +109,8 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(to, from, savedPosition) {
-    if (savedPosition) return savedPosition
-    return { top: 0, behavior: 'smooth' }
-  }
+  // Pas de scrollBehavior : la fenêtre ne défile jamais, les pages défilent dans le <main> de
+  // DefaultLayout, qui remet lui-même le défilement en haut à chaque changement de page.
 })
 
 // ── Guard auth ───────────────────────────────────────────────

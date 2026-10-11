@@ -206,6 +206,7 @@ Database (PostgreSQL)
 | GET     | `/api/user`           | JWT  | Profil de l'utilisateur   |
 | GET     | `/api/summary`        | JWT  | Solde global + totaux et dernières transactions d'un mois (`?month=yyyy-mm`) |
 | GET     | `/api/user/export`    | JWT  | Export déchiffré (`?format=json` ou `csv`) |
+| POST    | `/api/support`        | JWT  | Ticket bug / amélioration envoyé par email à `SUPPORT_EMAIL` (rien en base) — 5 / h / compte |
 | GET     | `/docs`               | —    | Swagger UI                |
 
 ## Navigation (mobile-first)
