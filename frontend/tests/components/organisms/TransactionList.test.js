@@ -12,11 +12,11 @@ const tx = (n, over = {}) => ({
 const mountList = (props = {}) => mount(TransactionList, { props })
 
 describe('TransactionList — états', () => {
-  it('affiche « Chargement… » pendant le chargement, sans liste', () => {
+  it('garde la liste déjà connue pendant une mise à jour, sans « Chargement… » qui clignote', () => {
     const w = mountList({ loading: true, transactions: [tx(1)] })
 
-    expect(w.text()).toContain('Chargement…')
-    expect(w.find('ul').exists()).toBe(false)
+    expect(w.text()).not.toContain('Chargement…')
+    expect(w.find('ul').exists()).toBe(true)
   })
 
   it('liste vide : le message par défaut', () => {

@@ -85,7 +85,9 @@ const emptyLabel = computed(() =>
     : 'Aucune transaction ce mois-ci.',
 )
 
-const hasMonthSpending = computed(() => !stats.loading && stats.data.total > 0)
+// Sans attendre la fin du rechargement : la courbe déjà connue reste affichée, au lieu de disparaître
+// puis réapparaître à chaque retour sur l'accueil.
+const hasMonthSpending = computed(() => stats.data.total > 0)
 
 /** Les 3 prochaines échéances, indépendamment du mois affiché. */
 const upcoming = computed(() =>

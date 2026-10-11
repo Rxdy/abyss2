@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import AppHeader from '@/components/organisms/AppHeader.vue'
 import { useAuthStore } from '@/stores/auth.store.js'
 import { listenForInstall, resetPwaInstall } from '@/composables/usePwaInstall.js'
@@ -59,31 +59,9 @@ describe('AppHeader — contenu', () => {
 })
 
 describe('AppHeader — déconnexion', () => {
-  it('expose un bouton de déconnexion étiqueté', () => {
-    const button = mount(AppHeader).find('.app-header__logout')
-
-    expect(button.exists()).toBe(true)
-    expect(button.attributes('aria-label')).toBe('Se déconnecter')
-  })
-
-  it('vide la session au clic', async () => {
-    const auth = useAuthStore()
+  it('n\'a pas de bouton de déconnexion : il se confondait avec les notifications, il vit dans le Profil', () => {
     const w = mount(AppHeader)
 
-    await w.find('.app-header__logout').trigger('click')
-    await flushPromises()
-
-    expect(auth.isAuthenticated).toBe(false)
-    expect(localStorage.getItem('abyss2_has_session')).toBeNull()
-  })
-
-  it('renvoie vers la page de connexion', async () => {
-    const push = vi.spyOn(router, 'push')
-    const w = mount(AppHeader)
-
-    await w.find('.app-header__logout').trigger('click')
-    await flushPromises()
-
-    expect(push).toHaveBeenCalledWith({ name: 'login' })
+    expect(w.find('[aria-label="Se déconnecter"]').exists()).toBe(false)
   })
 })
