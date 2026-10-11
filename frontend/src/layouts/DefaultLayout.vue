@@ -1,8 +1,16 @@
 <script setup>
+import { ref } from 'vue'
 /* AppHeader porte aussi la navigation (barre basse sous 1024px). */
 import AppHeader from '@/components/organisms/AppHeader.vue'
 import OfflineBanner from '@/components/organisms/OfflineBanner.vue'
 import UpdateBanner  from '@/components/organisms/UpdateBanner.vue'
+
+/* Les pages défilent dans <main>, pas dans la fenêtre : le scrollBehavior du routeur n'y a pas
+   accès. Chaque nouvelle page repart donc d'ici en haut, au moment où elle apparaît. */
+const main = ref(null)
+function scrollToTop() {
+  if (main.value) main.value.scrollTop = 0
+}
 </script>
 
 <template>
@@ -11,9 +19,9 @@ import UpdateBanner  from '@/components/organisms/UpdateBanner.vue'
     <OfflineBanner />
     <UpdateBanner />
 
-    <main class="default-layout__main">
+    <main ref="main" class="default-layout__main">
       <RouterView v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
+        <Transition name="page" mode="out-in" @before-enter="scrollToTop">
           <component :is="Component" />
         </Transition>
       </RouterView>

@@ -6,6 +6,7 @@ import { resolveInitialTheme, applyTheme } from './stores/app.store.js'
 import { registerSW } from 'virtual:pwa-register'
 import { listenForInstall } from './composables/usePwaInstall.js'
 import { registerPwaUpdates } from './composables/usePwaUpdate.js'
+import { fitIosStandaloneViewport } from './composables/iosStandaloneViewport.js'
 import '@/assets/styles/main.css'
 
 // Pas de zoom au pincement : iOS ignore `user-scalable=no` (index.html) depuis iOS 10, mais laisse
@@ -13,6 +14,9 @@ import '@/assets/styles/main.css'
 for (const type of ['gesturestart', 'gesturechange']) {
   document.addEventListener(type, (event) => event.preventDefault(), { passive: false })
 }
+
+// App installée sur iPhone : hauteur réelle de l'écran, sinon une bande vide reste sous la navbar
+fitIosStandaloneViewport()
 
 // Thème appliqué avant le montage pour éviter tout flash de couleur
 applyTheme(resolveInitialTheme())
