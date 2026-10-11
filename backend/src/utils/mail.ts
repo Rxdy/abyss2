@@ -1,5 +1,5 @@
 /**
- * Envoi d'email — SMTP générique (nodemailer), pour la récupération de mot de passe.
+ * Envoi d'email — SMTP générique (nodemailer) : récupération de mot de passe et tickets de support.
  *
  * Pas de fournisseur tiers (API type Resend/SendGrid) : n'importe quel relais SMTP fait l'affaire
  * (Mailpit en développement — voir docker-compose.yml, un vrai relais en production). Le transport
@@ -100,5 +100,69 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
       + 'Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email : rien ne se passera.',
     html: resetEmailHtml(resetUrl),
     attachments: [{ filename: 'logo.png', path: LOGO_PATH, cid: 'abyss2-logo' }],
+  })
+}
+
+// ── Support ─────────────────────────────────────────────────────────────────
+
+export type SupportKind = 'bug' | 'idea'
+
+export interface SupportTicket {
+  /** Référence courte affichée à l'utilisateur et reprise dans le sujet du mail. */
+  reference: string
+  kind:      SupportKind
+  subject:   string
+  message:   string
+  /** Adresse du compte : le mail y répond directement (Reply-To). */
+  userEmail: string
+  /** Appareil, taille d'écran, app installée… : de quoi reproduire un bug. */
+  context:   Record<string, string>
+}
+
+const SUPPORT_KIND_LABEL: Record<SupportKind, string> = { bug: 'Bug', idea: 'Amélioration' }
+
+/** Le texte vient de l'utilisateur : jamais injecté tel quel dans le HTML du mail. */
+const escapeHtml = (value: string) => value
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+
+function supportEmailHtml(ticket: SupportTicket) {
+  const label = SUPPORT_KIND_LABEL[ticket.kind]
+  const contextRows = Object.entries(ticket.context)
+    .map(([key, value]) => `<tr><td style="padding:2px 12px 2px 0;color:#8a8aa3;">${escapeHtml(key)}</td><td style="padding:2px 0;color:#4b4b63;">${escapeHtml(value)}</td></tr>`)
+    .join('')
+  return `<!DOCTYPE html>
+<html lang="fr">
+  <body style="margin:0;padding:24px 16px;background:#f0f2f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;">
+        <tr><td style="padding:24px 28px 0;">
+          <div style="font-size:13px;font-weight:600;color:${ticket.kind === 'bug' ? '#c0392b' : '#2a62c9'};text-transform:uppercase;letter-spacing:0.06em;">${label} · ${escapeHtml(ticket.reference)}</div>
+          <h1 style="margin:8px 0 4px;font-size:20px;color:#14142b;">${escapeHtml(ticket.subject)}</h1>
+          <div style="font-size:13px;color:#8a8aa3;">De ${escapeHtml(ticket.userEmail)} — répondre à ce mail lui répond directement.</div>
+        </td></tr>
+        <tr><td style="padding:16px 28px;">
+          <div style="font-size:15px;line-height:1.6;color:#14142b;white-space:pre-wrap;">${escapeHtml(ticket.message)}</div>
+        </td></tr>
+        <tr><td style="padding:0 28px 24px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:12px;border-top:1px solid #e4e6f0;padding-top:12px;width:100%;">${contextRows}</table>
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </body>
+</html>`
+}
+
+/** Ticket de support (bug ou amélioration) envoyé à l'adresse SUPPORT_EMAIL. */
+export async function sendSupportEmail(to: string, ticket: SupportTicket) {
+  const label = SUPPORT_KIND_LABEL[ticket.kind]
+  const context = Object.entries(ticket.context).map(([key, value]) => `${key} : ${value}`).join('\n')
+  await getTransporter().sendMail({
+    from:    FROM(),
+    to,
+    replyTo: ticket.userEmail,
+    subject: `[Abyss][${label}] ${ticket.subject} (${ticket.reference})`,
+    text:    `${label} ${ticket.reference} — de ${ticket.userEmail}\n\n${ticket.subject}\n\n${ticket.message}\n\n---\n${context}`,
+    html:    supportEmailHtml(ticket),
   })
 }

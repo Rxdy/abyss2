@@ -85,6 +85,12 @@ const routes = [
     meta: { layout: 'default', title: 'Enveloppes', requiresAuth: true }
   },
   {
+    path: '/profile/support',
+    name: 'support',
+    component: () => import('@/pages/SupportPage.vue'),
+    meta: { layout: 'default', title: 'Support', requiresAuth: true }
+  },
+  {
     path: '/recurring',
     name: 'recurring',
     component: () => import('@/pages/RecurringPage.vue'),
