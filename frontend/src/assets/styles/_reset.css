@@ -30,9 +30,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Fixé sur l'écran entier plutôt qu'en `height: 100%` : dans la PWA iOS (barre d'état translucide,
-   viewport-fit=cover), les hauteurs en % ou en vh ne comptent pas la zone de la barre d'état et
-   laissaient une bande vide en bas de l'écran. */
+/* PWA iOS : le repère des éléments fixés s'arrête avant le bas de l'écran (voir
+   composables/iosStandaloneViewport.js). Le body prend la hauteur réelle de l'écran et, par son
+   transform, devient le repère de tout ce qui est fixé : #app, navbar, toasts, modales téléportées. */
+.ios-standalone body {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--app-height);
+  transform: translateZ(0);
+}
+
 #app {
   position: fixed;
   inset: 0;
