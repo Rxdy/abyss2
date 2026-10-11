@@ -371,7 +371,9 @@ describe('POST /api/transactions', () => {
 
     const { data } = mockPrisma.transaction.create.mock.calls[0][0]
     expect(data.titleEncrypted).not.toContain('Carrefour')
-    expect(data.amountEncrypted).not.toContain('4250')
+    // Forme AES-256-GCM (iv:tag:données, en hex) plutôt que « ne contient pas 4250 » : un texte
+    // chiffré aléatoire en hex contient parfois ces chiffres par hasard (test instable).
+    expect(data.amountEncrypted).toMatch(/^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/)
     expect(decryptValue(data.titleEncrypted, TITLE_USAGE)).toBe('Carrefour')
     expect(decryptValue(data.amountEncrypted, AMOUNT_USAGE)).toBe('4250')
   })
