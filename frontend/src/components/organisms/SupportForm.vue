@@ -61,14 +61,33 @@ useDirtyForm(form)
 
 const copy = computed(() => KINDS[form.value.kind])
 
-/** Appareil et écran, joints à un bug pour pouvoir le reproduire. */
+/** Valeurs de env(safe-area-inset-*), lues sur un élément sonde (aucune API JS ne les donne). */
+function safeAreaInsets() {
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)'
+  document.body.appendChild(probe)
+  const style = getComputedStyle(probe)
+  const insets = `haut ${style.paddingTop}, bas ${style.paddingBottom}, gauche ${style.paddingLeft}, droite ${style.paddingRight}`
+  probe.remove()
+  return insets
+}
+
+/** Appareil, écran et mise en page, joints à un bug pour pouvoir le reproduire. */
 function deviceContext() {
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const root = document.documentElement
+  const navbar = document.querySelector('nav[aria-label="Navigation principale"]')?.getBoundingClientRect()
+  const round = (value) => (value == null ? '—' : Math.round(value))
   return {
     'Appareil': navigator.userAgent.slice(0, 300),
     'Écran': `${window.screen.width}×${window.screen.height}, fenêtre ${window.innerWidth}×${window.innerHeight}`,
     'App installée': standalone ? 'oui' : 'non',
-    'Thème': document.documentElement.dataset.theme ?? 'système',
+    'Thème': root.dataset.theme ?? 'système',
+    // Mesures pour les soucis d'affichage (barre du bas, zones de l'iPhone)
+    'Hauteurs': `visible ${round(window.visualViewport?.height)}, document ${root.clientHeight}, body ${round(document.body.getBoundingClientRect().height)}`,
+    'Zones sûres': safeAreaInsets(),
+    'Correctif iPhone': root.classList.contains('ios-standalone') ? `actif, ${root.style.getPropertyValue('--app-height')}` : 'inactif',
+    'Barre du bas': navbar ? `haut ${round(navbar.top)}, bas ${round(navbar.bottom)}, hauteur ${round(navbar.height)}` : 'absente',
   }
 }
 
@@ -146,7 +165,7 @@ async function submit() {
     />
 
     <BaseText v-if="form.kind === 'bug'" as="p" size="xs" color="muted">
-      Le modèle de votre appareil et la taille de l'écran sont joints au message, pour reproduire le problème.
+      Le modèle de votre appareil et les mesures de l'écran sont joints au message, pour reproduire le problème.
     </BaseText>
 
     <BaseButton type="submit" variant="primary" :loading="loading" full>Envoyer</BaseButton>
