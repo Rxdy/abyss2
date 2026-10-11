@@ -371,7 +371,9 @@ describe('POST /api/transactions', () => {
 
     const { data } = mockPrisma.transaction.create.mock.calls[0][0]
     expect(data.titleEncrypted).not.toContain('Carrefour')
-    expect(data.amountEncrypted).not.toContain('4250')
+    // Forme AES-256-GCM (iv:tag:données, en hex) plutôt que « ne contient pas 4250 » : un texte
+    // chiffré aléatoire en hex contient parfois ces chiffres par hasard (test instable).
+    expect(data.amountEncrypted).toMatch(/^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/)
     expect(decryptValue(data.titleEncrypted, TITLE_USAGE)).toBe('Carrefour')
     expect(decryptValue(data.amountEncrypted, AMOUNT_USAGE)).toBe('4250')
   })
@@ -577,5 +579,58 @@ describe('DELETE /api/transactions/:id', () => {
 
     expect(res.statusCode).toBe(404)
     expect(mockPrisma.transaction.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('date minimale : le mois de création du compte', () => {
+  // Compte créé le 11 octobre 2026 : rien avant le 1er octobre.
+  beforeEach(() => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      tokenVersion: 0, createdAt: new Date('2026-10-11T08:00:00.000Z'),
+      notifyEnvelopeOverspend: true, notifyNegativeBalance: true, notifyUncategorizedDigest: true,
+    })
+    mockPrisma.transaction.create.mockImplementation(async ({ data }: any) => ({ id: TX_ID, ...data, category: null }))
+  })
+
+  const create = (date: string) => app.inject({
+    method: 'POST', url: '/api/transactions', headers: auth(),
+    payload: { title: 'Carrefour', amount: 4250, date },
+  })
+
+  it('400 — refuse une transaction datée d\'avant le mois de création', async () => {
+    const res = await create('2026-09-30')
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toMatchObject({ code: 'DATE_BEFORE_ACCOUNT', error: expect.stringContaining('1er octobre 2026') })
+    expect(mockPrisma.transaction.create).not.toHaveBeenCalled()
+  })
+
+  it('accepte le 1er du mois de création, même avant le jour de création', async () => {
+    expect((await create('2026-10-01')).statusCode).toBe(201)
+  })
+
+  it('400 — refuse de déplacer une transaction avant le mois de création', async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow({ date: '2026-10-05' }))
+
+    const res = await app.inject({
+      method: 'PUT', url: `/api/transactions/${TX_ID}`, headers: auth(),
+      payload: { date: '2026-09-15' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('DATE_BEFORE_ACCOUNT')
+    expect(mockPrisma.transaction.update).not.toHaveBeenCalled()
+  })
+
+  it('laisse modifier une transaction déjà antérieure tant que sa date ne change pas', async () => {
+    mockPrisma.transaction.findFirst.mockResolvedValue(txRow({ date: '2026-09-05' }))
+    mockPrisma.transaction.update.mockResolvedValue(txRow({ date: '2026-09-05', amount: 5000 }))
+
+    const res = await app.inject({
+      method: 'PUT', url: `/api/transactions/${TX_ID}`, headers: auth(),
+      payload: { amount: 5000, date: '2026-09-05' },
+    })
+
+    expect(res.statusCode).toBe(200)
   })
 })

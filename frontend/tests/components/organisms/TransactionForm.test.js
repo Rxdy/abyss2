@@ -8,6 +8,7 @@ import TransactionForm from '@/components/organisms/TransactionForm.vue'
 import { useCategoriesStore } from '@/stores/categories.store.js'
 import { useCoinDropStore } from '@/stores/coinDrop.store.js'
 import { useToastStore } from '@/stores/toast.store.js'
+import { useAuthStore } from '@/stores/auth.store.js'
 import { todayISO } from '@/utils/format.js'
 import { mockApi, calls } from '../../stores/_helpers.js'
 
@@ -228,6 +229,40 @@ describe('TransactionForm — suppression', () => {
     expect(dialog()).toBeNull()
     expect(w.find('[role="alert"]').text()).toContain('Erreur serveur.')
     expect(w.emitted('deleted')).toBeUndefined()
+    w.unmount()
+  })
+})
+
+describe('TransactionForm — pas de date avant le mois de création du compte', () => {
+  beforeEach(() => {
+    useAuthStore().setSession({ csrfToken: 'csrf', user: { id: 'u1', email: 'alice@example.com', earliestDate: '2026-10-01' } })
+  })
+
+  it('borne le calendrier au 1er du mois de création', () => {
+    const w = mountForm()
+
+    expect(w.find('#transaction-date').attributes('min')).toBe('2026-10-01')
+    w.unmount()
+  })
+
+  it('refuse une date antérieure sans appeler l\'API', async () => {
+    const fetchMock = mockApi(() => ({ body: {} }))
+    const w = mountForm()
+    await w.find('#transaction-title').setValue('Courses')
+    await w.find('#transaction-amount').setValue('12,50')
+    await w.find('#transaction-date').setValue('2026-09-30')
+
+    await submit(w)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(w.text()).toContain('Pas de date avant le 1er octobre 2026')
+    w.unmount()
+  })
+
+  it('laisse une transaction déjà antérieure modifiable : sa propre date reste la borne', () => {
+    const w = mountForm({ transaction: TX }) // datée du 5 septembre
+
+    expect(w.find('#transaction-date').attributes('min')).toBe('2026-09-05')
     w.unmount()
   })
 })

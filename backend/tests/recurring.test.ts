@@ -231,3 +231,32 @@ describe('DELETE /api/recurring/:id', () => {
     expect(mockPrisma.recurringTransaction.delete).not.toHaveBeenCalled()
   })
 })
+
+describe('date minimale des charges fixes : le mois de création du compte', () => {
+  beforeEach(() => {
+    mockPrisma.user.findUnique.mockResolvedValue({ tokenVersion: 0, createdAt: new Date('2026-10-11T08:00:00.000Z') })
+  })
+
+  it('400 — refuse une charge fixe qui démarre avant le mois de création', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/recurring', headers: auth(),
+      payload: { title: 'Loyer', amount: 75000, dayOfMonth: 1, startDate: '2026-09-01' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json().code).toBe('DATE_BEFORE_ACCOUNT')
+    expect(mockPrisma.recurringTransaction.create).not.toHaveBeenCalled()
+  })
+
+  it('accepte un démarrage le 1er du mois de création', async () => {
+    mockPrisma.recurringTransaction.create.mockImplementation(async ({ data }: any) => ({ id: REC_ID, ...data, category: null }))
+    mockPrisma.recurringTransaction.findFirst.mockResolvedValue(recurringRow())
+
+    const res = await app.inject({
+      method: 'POST', url: '/api/recurring', headers: auth(),
+      payload: { title: 'Loyer', amount: 75000, dayOfMonth: 1, startDate: '2026-10-01' },
+    })
+
+    expect(res.statusCode).toBe(201)
+  })
+})

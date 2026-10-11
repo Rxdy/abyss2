@@ -144,6 +144,30 @@ onMounted(loadProfile)
       </RouterLink>
     </nav>
 
+    <!-- Support : bugs et améliorations, envoyés par email -->
+    <section class="profile__group">
+      <BaseText as="h2" size="sm" weight="semibold" color="primary">Support</BaseText>
+      <nav class="profile__settings" aria-label="Support">
+        <RouterLink to="/profile/support" class="profile__setting">
+          <BaseIcon name="alert" :size="18" />
+          <div class="profile__setting-body">
+            <BaseText size="sm" weight="medium" color="primary">Signaler un bug</BaseText>
+            <BaseText size="xs" color="muted">Quelque chose ne marche pas comme prévu</BaseText>
+          </div>
+          <BaseIcon name="chevron" :size="18" />
+        </RouterLink>
+
+        <RouterLink :to="{ path: '/profile/support', query: { type: 'idea' } }" class="profile__setting">
+          <BaseIcon name="message" :size="18" />
+          <div class="profile__setting-body">
+            <BaseText size="sm" weight="medium" color="primary">Proposer une amélioration</BaseText>
+            <BaseText size="xs" color="muted">Une idée pour rendre l'app plus utile</BaseText>
+          </div>
+          <BaseIcon name="chevron" :size="18" />
+        </RouterLink>
+      </nav>
+    </section>
+
     <!-- Mes données : export -->
     <section class="profile__section">
       <BaseText as="h2" size="sm" weight="semibold" color="primary">Mes données</BaseText>
@@ -228,6 +252,12 @@ onMounted(loadProfile)
   align-items: center;
   gap: var(--space-2);
   color: var(--color-text-muted);
+}
+
+.profile__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .profile__settings {

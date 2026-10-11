@@ -4,7 +4,7 @@
  * dans une modale (FormModal). `item` : la charge à modifier, ou null pour en
  * créer une. `saved` / `cancel` préviennent le parent, qui ferme la modale.
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import BaseButton  from '@/components/atoms/BaseButton.vue'
 import BaseInput   from '@/components/atoms/BaseInput.vue'
 import BaseSelect  from '@/components/atoms/BaseSelect.vue'
@@ -14,6 +14,8 @@ import { useDirtyForm }        from '@/composables/useDirtyForm.js'
 import { useCategoriesStore } from '@/stores/categories.store.js'
 import { useRecurringStore }  from '@/stores/recurring.store.js'
 import { useToastStore }      from '@/stores/toast.store.js'
+import { useAuthStore }       from '@/stores/auth.store.js'
+import { minEntryDate, tooEarlyMessage } from '@/utils/entryDate.js'
 import { parseAmountToCents, todayISO, currencySymbol } from '@/utils/format.js'
 
 const props = defineProps({
@@ -25,8 +27,9 @@ const emit = defineEmits(['saved', 'cancel'])
 const recurring  = useRecurringStore()
 const categories = useCategoriesStore()
 const toasts     = useToastStore()
+const auth       = useAuthStore()
 
-const noErrors = () => ({ title: '', amount: '', dayOfMonth: '', global: '' })
+const noErrors = () => ({ title: '', amount: '', dayOfMonth: '', startDate: '', global: '' })
 
 function initialForm() {
   const item = props.item
@@ -46,6 +49,9 @@ const form    = ref(initialForm())
 const errors  = ref(noErrors())
 const loading = ref(false)
 
+// Une charge fixe ne démarre pas avant le mois de création du compte (voir utils/entryDate.js)
+const minStart = computed(() => minEntryDate(auth.user?.earliestDate, props.item?.startDate))
+
 useDirtyForm(form)
 
 function validate() {
@@ -63,6 +69,10 @@ function validate() {
   const day = Number(form.value.dayOfMonth)
   if (!Number.isInteger(day) || day < 1 || day > 31) {
     errors.value.dayOfMonth = 'Jour du mois entre 1 et 31.'
+    ok = false
+  }
+  if (minStart.value && form.value.startDate < minStart.value) {
+    errors.value.startDate = tooEarlyMessage(auth.user.earliestDate)
     ok = false
   }
   return ok
@@ -147,6 +157,8 @@ async function submit() {
       id="recurring-start"
       type="date"
       label="Depuis le"
+      :min="minStart"
+      :error="errors.startDate"
       required
     />
 
