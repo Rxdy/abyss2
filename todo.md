@@ -15,6 +15,11 @@ Légende : 🔴 à traiter en premier · 🟠 important · 🟡 confort / polish
 - [ ] 🟠 **Activer les issues GitHub du support en production** : ajouter `SUPPORT_GITHUB_TOKEN` dans le
   `.env` du serveur (jeton à grain fin, dépôt abyss2 seul, Issues : Read and write). Sans lui, seul le
   mail part
+- [ ] 🟠 **Recherche dans les charges fixes** : une barre de recherche en haut de la page Récurrent pour
+  retrouver vite une dépense ou un revenu fixe et le gérer (modifier, mettre en pause, supprimer).
+  Filtrage côté navigateur, les libellés étant chiffrés en base : réutiliser `normalizeText` /
+  `matchesSearch` de `utils/search.js` (déjà utilisés par la recherche des transactions), sur le
+  libellé, la catégorie et la note
 - [ ] 🟡 **Panneau de mesures en dev** : affichage réservé au développement (hauteurs, zones sûres, traits
   au bas de l'écran et au bas de la barre) pour régler la PWA iPhone avec `make up-lan` et le
   rechargement à chaud, sans aller-retour en production
