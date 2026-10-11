@@ -69,6 +69,14 @@ describe('SupportForm', () => {
     expect(call.body).not.toHaveProperty('context')
   })
 
+  it('prévient que bugs et améliorations peuvent être publiés sans nom, pas les autres demandes', async () => {
+    const w = mount(SupportForm)
+    expect(w.text()).toContain('suivi public des bugs, sans votre nom ni votre email')
+
+    await w.findAll('[aria-pressed]')[2].trigger('click')
+    expect(w.text()).not.toContain('suivi public')
+  })
+
   it('valide avant d\'appeler l\'API', async () => {
     const fetchMock = mockApi(() => ({ status: 201, body: {} }))
     const w = mount(SupportForm)

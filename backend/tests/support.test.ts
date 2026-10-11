@@ -8,6 +8,10 @@ const sendSupportEmail = vi.fn().mockResolvedValue(undefined)
 // Seul l'envoi est simulé : le choix du destinataire (supportRecipient) reste le vrai code.
 vi.mock('../src/utils/mail.js', async (importOriginal) => ({ ...(await importOriginal<object>()), sendSupportEmail }))
 
+const createGithubIssue = vi.fn()
+// Seule la requête à GitHub est simulée : le format de l'issue (codeBlock…) reste le vrai code.
+vi.mock('../src/utils/github.js', async (importOriginal) => ({ ...(await importOriginal<object>()), createGithubIssue }))
+
 import { buildApp } from '../src/app.js'
 
 beforeAll(() => {
@@ -152,5 +156,71 @@ describe('POST /api/support', () => {
 
     expect(res.statusCode).toBe(429)
     expect(sendSupportEmail).toHaveBeenCalledTimes(5)
+  })
+})
+
+describe('POST /api/support — issue GitHub', () => {
+  beforeEach(() => {
+    process.env.SUPPORT_GITHUB_TOKEN = 'github_pat_test'
+    process.env.SUPPORT_GITHUB_REPO  = 'Rxdy/abyss2'
+    createGithubIssue.mockReset().mockResolvedValue({ number: 42, url: 'https://github.com/Rxdy/abyss2/issues/42' })
+  })
+
+  afterEach(() => {
+    delete process.env.SUPPORT_GITHUB_TOKEN
+    delete process.env.SUPPORT_GITHUB_REPO
+  })
+
+  it('crée une issue « bug » anonymisée et met son lien dans le mail', async () => {
+    const res = await send(ticket)
+
+    expect(res.statusCode).toBe(201)
+    const [issue] = createGithubIssue.mock.calls[0]
+    expect(issue.title).toBe('[Bug] La navbar flotte')
+    expect(issue.labels).toEqual(['bug'])
+    expect(issue.body).toContain(ticket.message)
+    expect(issue.body).toContain(res.json().reference)
+    // Dépôt public : ni l'email, ni l'identifiant du compte
+    expect(issue.body).not.toContain('alice@example.com')
+    expect(issue.body).not.toContain('uuid-test-user')
+    expect(sendSupportEmail.mock.calls[0][1].issue).toEqual({ number: 42, url: 'https://github.com/Rxdy/abyss2/issues/42' })
+  })
+
+  it('une amélioration reçoit le label « enhancement »', async () => {
+    await send({ ...ticket, kind: 'idea' })
+
+    expect(createGithubIssue.mock.calls[0][0]).toMatchObject({ title: '[Amélioration] La navbar flotte', labels: ['enhancement'] })
+  })
+
+  it('pas d\'issue pour une autre demande : elle concerne un compte, pas le code', async () => {
+    await send({ ...ticket, kind: 'other' })
+
+    expect(createGithubIssue).not.toHaveBeenCalled()
+    expect(sendSupportEmail).toHaveBeenCalledOnce()
+  })
+
+  it('GitHub en panne : le ticket part quand même par mail, sans lien', async () => {
+    createGithubIssue.mockRejectedValueOnce(new Error('GitHub down'))
+
+    const res = await send(ticket)
+
+    expect(res.statusCode).toBe(201)
+    expect(sendSupportEmail.mock.calls[0][1].issue).toBeUndefined()
+  })
+
+  it('mail en échec mais issue créée : le ticket n\'est pas perdu, 201', async () => {
+    sendSupportEmail.mockRejectedValueOnce(new Error('SMTP down'))
+
+    const res = await send(ticket)
+
+    expect(res.statusCode).toBe(201)
+  })
+
+  it('sans jeton GitHub, aucune issue', async () => {
+    delete process.env.SUPPORT_GITHUB_TOKEN
+
+    await send(ticket)
+
+    expect(createGithubIssue).not.toHaveBeenCalled()
   })
 })

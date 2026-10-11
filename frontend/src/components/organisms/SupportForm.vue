@@ -167,6 +167,10 @@ async function submit() {
     <BaseText v-if="form.kind === 'bug'" as="p" size="xs" color="muted">
       Le modèle de votre appareil et les mesures de l'écran sont joints au message, pour reproduire le problème.
     </BaseText>
+    <!-- Le serveur en fait une issue sur le dépôt GitHub public (voir backend/src/utils/github.ts) -->
+    <BaseText v-if="form.kind !== 'other'" as="p" size="xs" color="muted">
+      Votre message pourra être publié sur notre suivi public des bugs, sans votre nom ni votre email.
+    </BaseText>
 
     <BaseButton type="submit" variant="primary" :loading="loading" full>Envoyer</BaseButton>
   </form>
