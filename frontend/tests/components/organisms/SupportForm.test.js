@@ -51,8 +51,21 @@ describe('SupportForm', () => {
     expect(w.text()).toContain('Ce qui ne marche pas')
 
     await w.findAll('[aria-pressed]')[1].trigger('click')
-
     expect(w.text()).toContain('Votre idée en une phrase')
+
+    await w.findAll('[aria-pressed]')[2].trigger('click')
+    expect(w.text()).toContain('Votre message')
+  })
+
+  it('envoie une autre demande, sans informations sur l\'appareil', async () => {
+    const fetchMock = mockApi(() => ({ status: 201, body: { reference: 'AB-3333RR' } }))
+    const w = mount(SupportForm, { props: { kind: 'other' } })
+
+    await fill(w, 'Question compte', 'Comment changer ma devise par défaut ?')
+
+    const [call] = calls(fetchMock)
+    expect(call.body.kind).toBe('other')
+    expect(call.body).not.toHaveProperty('context')
   })
 
   it('valide avant d\'appeler l\'API', async () => {

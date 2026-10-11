@@ -1,7 +1,7 @@
 <script setup>
 /*
- * Support : signaler un bug ou proposer une amélioration. Le message part par email ;
- * `?type=idea` ouvre directement le formulaire sur « amélioration ».
+ * Support : signaler un bug, proposer une amélioration ou une autre demande. Le message part par
+ * email ; `?type=idea` ou `?type=other` ouvre directement le formulaire sur ce type.
  */
 import { useRoute } from 'vue-router'
 import BaseText    from '@/components/atoms/BaseText.vue'
@@ -22,7 +22,7 @@ const route = useRoute()
       </BaseText>
     </header>
 
-    <SupportForm class="support__section" :kind="route.query.type === 'idea' ? 'idea' : 'bug'" />
+    <SupportForm class="support__section" :kind="['idea', 'other'].includes(route.query.type) ? route.query.type : 'bug'" />
   </section>
 </template>
 

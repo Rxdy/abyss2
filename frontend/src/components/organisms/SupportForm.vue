@@ -1,6 +1,6 @@
 <script setup>
 /*
- * Ticket de support : un bug ou une amélioration, envoyé par email (POST /api/support).
+ * Ticket de support : un bug, une amélioration ou une autre demande, envoyé par email (POST /api/support).
  * Pour un bug, l'appareil et l'écran sont joints au message : de quoi le reproduire sans
  * avoir à le demander. La référence renvoyée par l'API est montrée à l'utilisateur.
  */
@@ -16,7 +16,7 @@ import BaseTextarea from '@/components/atoms/BaseTextarea.vue'
 import AlertBanner  from '@/components/molecules/AlertBanner.vue'
 
 const props = defineProps({
-  /** Type choisi à l'ouverture : 'bug' | 'idea' */
+  /** Type choisi à l'ouverture : 'bug' | 'idea' | 'other' */
   kind: { type: String, default: 'bug' },
 })
 
@@ -25,18 +25,25 @@ const MESSAGE_MAX = 5000
 
 const KINDS = {
   bug: {
-    label: 'Signaler un bug',
+    label: 'Bug',
     subject: 'Ce qui ne marche pas',
     subjectPlaceholder: 'Ex. : la barre du bas ne touche pas le bord',
     message: 'Que s\'est-il passé ?',
     messagePlaceholder: 'Ce que vous faisiez, ce qui s\'est passé, ce que vous attendiez.',
   },
   idea: {
-    label: 'Proposer une amélioration',
+    label: 'Amélioration',
     subject: 'Votre idée en une phrase',
     subjectPlaceholder: 'Ex. : comparer deux mois dans les statistiques',
     message: 'Dites-nous en plus',
     messagePlaceholder: 'À quoi cela vous servirait, comment vous l\'imaginez.',
+  },
+  other: {
+    label: 'Autre',
+    subject: 'Sujet',
+    subjectPlaceholder: 'Ex. : une question sur mon compte',
+    message: 'Votre message',
+    messagePlaceholder: 'Dites-nous ce dont vous avez besoin.',
   },
 }
 
@@ -157,7 +164,7 @@ async function submit() {
 
 .support-form__kinds {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-2);
 }
 </style>

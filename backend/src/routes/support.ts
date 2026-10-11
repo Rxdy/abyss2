@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { decryptEmail } from '../utils/crypto.js'
-import { sendSupportEmail, type SupportKind } from '../utils/mail.js'
+import { sendSupportEmail, supportRecipient, type SupportKind } from '../utils/mail.js'
 import { rateLimitError } from '../utils/rate-limit.js'
 
 const errorSchema = {
@@ -44,7 +44,7 @@ export default async function supportRoutes(fastify: FastifyInstance) {
   }
 
   // ── POST /api/support ───────────────────────────────────
-  // Bug ou amélioration, envoyé par email à SUPPORT_EMAIL. Rien n'est stocké en base : la boîte
+  // Bug, amélioration ou autre demande, envoyé par email (voir supportRecipient). Rien n'est stocké en base : la boîte
   // mail sert de file de tickets, et y répondre répond directement à l'utilisateur (Reply-To).
   fastify.post<{ Body: SupportBody }>('/api/support', {
     schema: {
@@ -56,7 +56,7 @@ export default async function supportRoutes(fastify: FastifyInstance) {
         additionalProperties: false,
         required: ['kind', 'subject', 'message'],
         properties: {
-          kind:    { type: 'string', enum: ['bug', 'idea'] },
+          kind:    { type: 'string', enum: ['bug', 'idea', 'other'] },
           subject: { type: 'string', minLength: 3, maxLength: SUBJECT_MAX, pattern: '\\S' },
           message: { type: 'string', minLength: 10, maxLength: MESSAGE_MAX, pattern: '\\S' },
           context: {
@@ -78,9 +78,9 @@ export default async function supportRoutes(fastify: FastifyInstance) {
     },
     preHandler: [fastify.authenticate, fastify.csrfIfCookie, enforceLimit],
   }, async (req, reply) => {
-    const to = process.env.SUPPORT_EMAIL
+    const to = supportRecipient()
     if (!to) {
-      fastify.log.error('SUPPORT_EMAIL non défini : ticket de support impossible à envoyer')
+      fastify.log.error('Ni SUPPORT_EMAIL ni SMTP_USER : ticket de support impossible à envoyer')
       return reply.code(503).send({ error: 'Le support n\'est pas disponible pour le moment.', code: 'SUPPORT_NOT_CONFIGURED' })
     }
 

@@ -5,7 +5,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 
 const sendSupportEmail = vi.fn().mockResolvedValue(undefined)
-vi.mock('../src/utils/mail.js', () => ({ sendSupportEmail, sendPasswordResetEmail: vi.fn() }))
+// Seul l'envoi est simulé : le choix du destinataire (supportRecipient) reste le vrai code.
+vi.mock('../src/utils/mail.js', async (importOriginal) => ({ ...(await importOriginal<object>()), sendSupportEmail }))
 
 import { buildApp } from '../src/app.js'
 
@@ -22,6 +23,8 @@ let token: string
 
 beforeEach(async () => {
   process.env.SUPPORT_EMAIL = 'support@example.com'
+  process.env.SMTP_USER = ''
+  process.env.SMTP_HOST = 'smtp.gmail.com'
   sendSupportEmail.mockClear().mockResolvedValue(undefined)
   mockPrisma = {
     user: {
@@ -107,7 +110,24 @@ describe('POST /api/support', () => {
     expect(sendSupportEmail.mock.calls[0][1]).not.toHaveProperty('priority')
   })
 
-  it('503 — quand SUPPORT_EMAIL n\'est pas configuré', async () => {
+  it('sans SUPPORT_EMAIL, écrit à l\'adresse d\'envoi (SMTP_USER) : elle s\'envoie le ticket à elle-même', async () => {
+    process.env.SUPPORT_EMAIL = ''
+    process.env.SMTP_USER = 'rudy@example.com'
+
+    const res = await send(ticket)
+
+    expect(res.statusCode).toBe(201)
+    expect(sendSupportEmail.mock.calls[0][0]).toBe('rudy@example.com')
+  })
+
+  it('accepte une autre demande', async () => {
+    const res = await send({ ...ticket, kind: 'other' })
+
+    expect(res.statusCode).toBe(201)
+    expect(sendSupportEmail.mock.calls[0][1].kind).toBe('other')
+  })
+
+  it('503 — quand aucun destinataire n\'est configuré', async () => {
     delete process.env.SUPPORT_EMAIL
 
     const res = await send(ticket)

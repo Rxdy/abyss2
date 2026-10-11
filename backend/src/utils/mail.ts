@@ -112,7 +112,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
 
 // ── Support ─────────────────────────────────────────────────────────────────
 
-export type SupportKind = 'bug' | 'idea'
+export type SupportKind = 'bug' | 'idea' | 'other'
 
 export interface SupportTicket {
   /** Référence courte affichée à l'utilisateur et reprise dans le sujet du mail. */
@@ -126,7 +126,19 @@ export interface SupportTicket {
   context:   Record<string, string>
 }
 
-const SUPPORT_KIND_LABEL: Record<SupportKind, string> = { bug: 'Bug', idea: 'Amélioration' }
+const SUPPORT_KIND_LABEL: Record<SupportKind, string> = { bug: 'Bug', idea: 'Amélioration', other: 'Autre demande' }
+const SUPPORT_KIND_COLOR: Record<SupportKind, string> = { bug: '#c0392b', idea: '#2a62c9', other: '#4b4b63' }
+
+/**
+ * Destinataire des tickets : SUPPORT_EMAIL, sinon l'adresse qui envoie déjà les mails (SMTP_USER) —
+ * le compte Gmail de production s'écrit alors à lui-même. Mailpit en développement. null si rien
+ * n'est configuré.
+ */
+export function supportRecipient(): string | null {
+  if (process.env.SUPPORT_EMAIL) return process.env.SUPPORT_EMAIL
+  if (process.env.SMTP_USER) return process.env.SMTP_USER
+  return LOCAL_SMTP_HOSTS.has(process.env.SMTP_HOST ?? '') ? 'support@abyss2.local' : null
+}
 
 /** Le texte vient de l'utilisateur : jamais injecté tel quel dans le HTML du mail. */
 const escapeHtml = (value: string) => value
@@ -144,7 +156,7 @@ function supportEmailHtml(ticket: SupportTicket) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;">
         <tr><td style="padding:24px 28px 0;">
-          <div style="font-size:13px;font-weight:600;color:${ticket.kind === 'bug' ? '#c0392b' : '#2a62c9'};text-transform:uppercase;letter-spacing:0.06em;">${label} · ${escapeHtml(ticket.reference)}</div>
+          <div style="font-size:13px;font-weight:600;color:${SUPPORT_KIND_COLOR[ticket.kind]};text-transform:uppercase;letter-spacing:0.06em;">${label} · ${escapeHtml(ticket.reference)}</div>
           <h1 style="margin:8px 0 4px;font-size:20px;color:#14142b;">${escapeHtml(ticket.subject)}</h1>
           <div style="font-size:13px;color:#8a8aa3;">De ${escapeHtml(ticket.userEmail)} — répondre à ce mail lui répond directement.</div>
         </td></tr>
@@ -160,7 +172,7 @@ function supportEmailHtml(ticket: SupportTicket) {
 </html>`
 }
 
-/** Ticket de support (bug ou amélioration) envoyé à l'adresse SUPPORT_EMAIL. */
+/** Ticket de support envoyé à `to` (voir supportRecipient). Sujet : « Support Abyss — <type> : <sujet> ». */
 export async function sendSupportEmail(to: string, ticket: SupportTicket) {
   const label = SUPPORT_KIND_LABEL[ticket.kind]
   const context = Object.entries(ticket.context).map(([key, value]) => `${key} : ${value}`).join('\n')
@@ -168,8 +180,8 @@ export async function sendSupportEmail(to: string, ticket: SupportTicket) {
     from:    FROM(),
     to,
     replyTo: ticket.userEmail,
-    subject: `[Abyss][${label}] ${ticket.subject} (${ticket.reference})`,
-    text:    `${label} ${ticket.reference} — de ${ticket.userEmail}\n\n${ticket.subject}\n\n${ticket.message}\n\n---\n${context}`,
+    subject: `Support Abyss — ${label} : ${ticket.subject}`,
+    text:    `Type : ${label}\nRéférence : ${ticket.reference}\nDe : ${ticket.userEmail}\n\n${ticket.subject}\n\n${ticket.message}\n\n---\n${context}`,
     html:    supportEmailHtml(ticket),
   })
 }

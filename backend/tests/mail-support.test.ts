@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest'
 const sendMail = vi.fn().mockResolvedValue(undefined)
 vi.mock('nodemailer', () => ({ default: { createTransport: () => ({ sendMail }) } }))
 
-const { sendSupportEmail } = await import('../src/utils/mail.js')
+const { sendSupportEmail, supportRecipient } = await import('../src/utils/mail.js')
 
 const lastMail = () => sendMail.mock.calls.at(-1)![0]
 
@@ -31,7 +31,8 @@ describe('sendSupportEmail', () => {
     const mail = lastMail()
     expect(mail.to).toBe('support@example.com')
     expect(mail.replyTo).toBe('alice@example.com')
-    expect(mail.subject).toBe('[Abyss][Bug] Bouton <b>cassé</b> (AB-7F3K2Q)')
+    expect(mail.subject).toBe('Support Abyss — Bug : Bouton <b>cassé</b>')
+    expect(mail.text).toMatch(/^Type : Bug\nRéférence : AB-7F3K2Q\nDe : alice@example.com/)
   })
 
   it('échappe tout le texte de l\'utilisateur dans la version HTML', async () => {
@@ -44,9 +45,28 @@ describe('sendSupportEmail', () => {
     expect(html).toContain('iPhone &quot;15&quot;')
   })
 
-  it('libelle une amélioration comme telle', async () => {
-    await sendSupportEmail('support@example.com', { ...ticket, kind: 'idea' })
+  it.each([
+    ['idea', 'Support Abyss — Amélioration : '],
+    ['other', 'Support Abyss — Autre demande : '],
+  ] as const)('indique le type %s dans le sujet', async (kind, prefix) => {
+    await sendSupportEmail('support@example.com', { ...ticket, kind })
 
-    expect(lastMail().subject).toMatch(/^\[Abyss\]\[Amélioration\]/)
+    expect(lastMail().subject.startsWith(prefix)).toBe(true)
+  })
+})
+
+describe('supportRecipient', () => {
+  it('prend SUPPORT_EMAIL, sinon SMTP_USER, sinon Mailpit en développement', () => {
+    Object.assign(process.env, { SUPPORT_EMAIL: 'support@example.com', SMTP_USER: 'rudy@example.com', SMTP_HOST: 'smtp.gmail.com' })
+    expect(supportRecipient()).toBe('support@example.com')
+
+    process.env.SUPPORT_EMAIL = ''
+    expect(supportRecipient()).toBe('rudy@example.com')
+
+    process.env.SMTP_USER = ''
+    expect(supportRecipient()).toBeNull()
+
+    process.env.SMTP_HOST = 'mailpit'
+    expect(supportRecipient()).toBe('support@abyss2.local')
   })
 })
