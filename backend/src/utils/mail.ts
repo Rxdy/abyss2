@@ -124,6 +124,8 @@ export interface SupportTicket {
   userEmail: string
   /** Appareil, taille d'écran, app installée… : de quoi reproduire un bug. */
   context:   Record<string, string>
+  /** Issue GitHub créée pour ce ticket, s'il y en a une (voir utils/github.ts). */
+  issue?:    { number: number; url: string }
 }
 
 const SUPPORT_KIND_LABEL: Record<SupportKind, string> = { bug: 'Bug', idea: 'Amélioration', other: 'Autre demande' }
@@ -159,6 +161,7 @@ function supportEmailHtml(ticket: SupportTicket) {
           <div style="font-size:13px;font-weight:600;color:${SUPPORT_KIND_COLOR[ticket.kind]};text-transform:uppercase;letter-spacing:0.06em;">${label} · ${escapeHtml(ticket.reference)}</div>
           <h1 style="margin:8px 0 4px;font-size:20px;color:#14142b;">${escapeHtml(ticket.subject)}</h1>
           <div style="font-size:13px;color:#8a8aa3;">De ${escapeHtml(ticket.userEmail)} — répondre à ce mail lui répond directement.</div>
+          ${ticket.issue ? `<div style="margin-top:6px;font-size:13px;"><a href="${escapeHtml(ticket.issue.url)}" style="color:#2a62c9;">Issue GitHub #${ticket.issue.number}</a></div>` : ''}
         </td></tr>
         <tr><td style="padding:16px 28px;">
           <div style="font-size:15px;line-height:1.6;color:#14142b;white-space:pre-wrap;">${escapeHtml(ticket.message)}</div>
@@ -181,7 +184,9 @@ export async function sendSupportEmail(to: string, ticket: SupportTicket) {
     to,
     replyTo: ticket.userEmail,
     subject: `Support Abyss — ${label} : ${ticket.subject}`,
-    text:    `Type : ${label}\nRéférence : ${ticket.reference}\nDe : ${ticket.userEmail}\n\n${ticket.subject}\n\n${ticket.message}\n\n---\n${context}`,
+    text:    `Type : ${label}\nRéférence : ${ticket.reference}\nDe : ${ticket.userEmail}\n`
+      + (ticket.issue ? `Issue GitHub : #${ticket.issue.number} ${ticket.issue.url}\n` : '')
+      + `\n${ticket.subject}\n\n${ticket.message}\n\n---\n${context}`,
     html:    supportEmailHtml(ticket),
   })
 }
