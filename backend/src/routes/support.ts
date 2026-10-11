@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { decryptEmail } from '../utils/crypto.js'
 import { sendSupportEmail, supportRecipient, type SupportKind } from '../utils/mail.js'
+import { codeBlock, codeCell, createGithubIssue, githubIssuesConfigured, type CreatedIssue } from '../utils/github.js'
 import { rateLimitError } from '../utils/rate-limit.js'
 
 const errorSchema = {
@@ -20,6 +21,27 @@ interface SupportBody {
   subject:  string
   message:  string
   context?: Record<string, string>
+}
+
+/** Seuls les bugs et les améliorations deviennent des issues : une « autre demande » concerne un compte, pas le code. */
+const ISSUE_LABELS: Partial<Record<SupportKind, string>> = { bug: 'bug', idea: 'enhancement' }
+const ISSUE_PREFIX: Partial<Record<SupportKind, string>> = { bug: 'Bug', idea: 'Amélioration' }
+
+/**
+ * Corps de l'issue (dépôt public) : jamais l'email ni l'identifiant du compte, seulement ce que la
+ * personne a écrit — dans un bloc de code — et les mesures de son appareil.
+ */
+function issueBody(reference: string, kind: SupportKind, subject: string, message: string, context: Record<string, string>) {
+  const rows = Object.entries(context).map(([key, value]) => `| ${key} | ${codeCell(value)} |`)
+  return [
+    `**${ISSUE_PREFIX[kind]}** signalé depuis l'app (Profil → Support) · référence \`${reference}\``,
+    '',
+    'Publié sans nom ni email : l\'auteur est joignable par le mail du support portant cette référence.',
+    '',
+    '### Message',
+    codeBlock(`${subject}\n\n${message}`),
+    ...(rows.length ? ['', '### Appareil', '', '| | |', '|---|---|', ...rows] : []),
+  ].join('\n')
 }
 
 /** Référence courte et lisible (ex. AB-7F3K2Q), pour retrouver le ticket dans la boîte mail. */
@@ -44,7 +66,8 @@ export default async function supportRoutes(fastify: FastifyInstance) {
   }
 
   // ── POST /api/support ───────────────────────────────────
-  // Bug, amélioration ou autre demande, envoyé par email (voir supportRecipient). Rien n'est stocké en base : la boîte
+  // Bug, amélioration ou autre demande, envoyé par email (voir supportRecipient). Un bug ou une
+  // amélioration devient aussi une issue GitHub anonymisée, quand le jeton est configuré. Rien n'est stocké en base : la boîte
   // mail sert de file de tickets, et y répondre répond directement à l'utilisateur (Reply-To).
   fastify.post<{ Body: SupportBody }>('/api/support', {
     schema: {
@@ -91,12 +114,32 @@ export default async function supportRoutes(fastify: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: 'Utilisateur introuvable.', code: 'USER_NOT_FOUND' })
 
     const reference = newReference()
+    const { kind } = req.body
+    const subject = req.body.subject.trim()
+    const message = req.body.message.trim()
+
+    // L'issue d'abord, pour mettre son lien dans le mail. Un échec côté GitHub ne bloque pas le ticket.
+    let issue: CreatedIssue | undefined
+    const label = ISSUE_LABELS[kind]
+    if (label && githubIssuesConfigured()) {
+      try {
+        issue = await createGithubIssue({
+          title:  `[${ISSUE_PREFIX[kind]}] ${subject}`,
+          body:   issueBody(reference, kind, subject, message, req.body.context ?? {}),
+          labels: [label],
+        })
+      } catch (err) {
+        fastify.log.error(err, 'Échec de la création de l\'issue GitHub du ticket de support')
+      }
+    }
+
     try {
       await sendSupportEmail(to, {
         reference,
-        kind:      req.body.kind,
-        subject:   req.body.subject.trim(),
-        message:   req.body.message.trim(),
+        kind,
+        subject,
+        message,
+        issue,
         userEmail: decryptEmail(user.emailEncrypted),
         context: {
           ...req.body.context,
@@ -106,8 +149,10 @@ export default async function supportRoutes(fastify: FastifyInstance) {
         },
       })
     } catch (err) {
-      // Ici, contrairement au mot de passe oublié, l'utilisateur doit savoir que rien n'est parti.
       fastify.log.error(err, 'Échec de l\'envoi du ticket de support')
+      // Déjà enregistré sur GitHub : le ticket n'est pas perdu, on ne demande pas de le renvoyer.
+      if (issue) return reply.code(201).send({ reference })
+      // Sinon, contrairement au mot de passe oublié, l'utilisateur doit savoir que rien n'est parti.
       return reply.code(502).send({ error: 'Le message n\'a pas pu être envoyé. Réessayez dans quelques minutes.', code: 'SUPPORT_SEND_FAILED' })
     }
 

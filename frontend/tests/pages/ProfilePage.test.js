@@ -47,6 +47,19 @@ describe('ProfilePage — affichage', () => {
     expect(links).toContain('/profile/preferences')
   })
 
+  it('mène à Mes données et au Support par une seule entrée chacun, sans gros boutons sur la page', async () => {
+    mockFetch(PROFILE)
+
+    const w = mount(ProfilePage)
+    await flushPromises()
+
+    const links = w.findAll('a').map((a) => a.attributes('href'))
+    expect(links).toContain('/profile/data')
+    expect(links.filter((href) => href.startsWith('/profile/support'))).toEqual(['/profile/support'])
+    expect(w.text()).not.toContain('Tout exporter')
+    expect(w.text()).not.toContain('Supprimer mon compte')
+  })
+
   it('affiche email, date de création et identifiant', async () => {
     mockFetch(PROFILE)
 
@@ -105,51 +118,3 @@ describe('ProfilePage — déconnexion', () => {
     expect(push).toHaveBeenCalledWith({ name: 'login' })
   })
 })
-
-describe('ProfilePage — export des données', () => {
-  const exportButton = (w, label) => w.findAll('button').find(b => b.text().includes(label))
-
-  it('propose les deux formats', async () => {
-    mockFetch(PROFILE)
-
-    const w = mount(ProfilePage)
-    await flushPromises()
-
-    expect(exportButton(w, 'Tout exporter (JSON)')).toBeTruthy()
-    expect(exportButton(w, 'Transactions (CSV)')).toBeTruthy()
-  })
-
-  it('télécharge le format choisi', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true, status: 200, json: async () => PROFILE, blob: async () => new Blob(['x']),
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    URL.createObjectURL = vi.fn(() => 'blob:fake')
-    URL.revokeObjectURL = vi.fn()
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    const w = mount(ProfilePage)
-    await flushPromises()
-    await exportButton(w, 'Transactions (CSV)').trigger('click')
-    await flushPromises()
-
-    expect(fetchMock.mock.calls.at(-1)[0]).toMatch(/\/api\/user\/export\?format=csv$/)
-    expect(click).toHaveBeenCalledOnce()
-    click.mockRestore()
-  })
-
-  it('affiche l\'erreur si l\'export échoue', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => PROFILE })
-      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'Erreur serveur.' }) })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const w = mount(ProfilePage)
-    await flushPromises()
-    await exportButton(w, 'Tout exporter (JSON)').trigger('click')
-    await flushPromises()
-
-    expect(w.find('[role="alert"]').text()).toContain('Erreur serveur.')
-  })
-})
-

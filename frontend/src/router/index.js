@@ -85,6 +85,12 @@ const routes = [
     meta: { layout: 'default', title: 'Enveloppes', requiresAuth: true }
   },
   {
+    path: '/profile/data',
+    name: 'data',
+    component: () => import('@/pages/DataPage.vue'),
+    meta: { layout: 'default', title: 'Mes données', requiresAuth: true }
+  },
+  {
     path: '/profile/support',
     name: 'support',
     component: () => import('@/pages/SupportPage.vue'),

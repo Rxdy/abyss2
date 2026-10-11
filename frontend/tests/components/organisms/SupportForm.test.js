@@ -30,7 +30,8 @@ describe('SupportForm', () => {
     expect(call.method).toBe('POST')
     expect(call.path).toBe('/api/support')
     expect(call.body).toMatchObject({ kind: 'bug', subject: 'La navbar flotte', message: 'Une bande vide reste sous la barre du bas.' })
-    expect(Object.keys(call.body.context)).toEqual(['Appareil', 'Écran', 'App installée', 'Thème'])
+    expect(Object.keys(call.body.context)).toEqual(['Appareil', 'Écran', 'App installée', 'Thème', 'Hauteurs', 'Zones sûres', 'Correctif iPhone', 'Barre du bas'])
+    expect(Object.values(call.body.context).every((value) => value.length <= 300)).toBe(true)
     expect(w.text()).toContain('AB-7F3K2Q')
     expect(useToastStore().items[0].message).toContain('envoyé')
   })
@@ -66,6 +67,14 @@ describe('SupportForm', () => {
     const [call] = calls(fetchMock)
     expect(call.body.kind).toBe('other')
     expect(call.body).not.toHaveProperty('context')
+  })
+
+  it('prévient que bugs et améliorations peuvent être publiés sans nom, pas les autres demandes', async () => {
+    const w = mount(SupportForm)
+    expect(w.text()).toContain('suivi public des bugs, sans votre nom ni votre email')
+
+    await w.findAll('[aria-pressed]')[2].trigger('click')
+    expect(w.text()).not.toContain('suivi public')
   })
 
   it('valide avant d\'appeler l\'API', async () => {

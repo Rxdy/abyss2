@@ -1,21 +1,11 @@
 <script setup>
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store.js'
+/* Pas de bouton de déconnexion ici : trop proche de la cloche des notifications, on s'y trompait.
+   La déconnexion se fait depuis le Profil. */
 import BaseText    from '@/components/atoms/BaseText.vue'
-import BaseIcon    from '@/components/atoms/BaseIcon.vue'
-import IconButton  from '@/components/atoms/IconButton.vue'
 import AppLogo     from '@/components/atoms/AppLogo.vue'
 import PwaInstallButton  from '@/components/organisms/PwaInstallButton.vue'
 import NotificationBell  from '@/components/organisms/NotificationBell.vue'
 import AppNavbar   from '@/components/organisms/AppNavbar.vue'
-
-const router = useRouter()
-const auth   = useAuthStore()
-
-async function logout() {
-  await auth.logout()
-  router.push({ name: 'login' })
-}
 </script>
 
 <template>
@@ -33,15 +23,6 @@ async function logout() {
     <div class="app-header__actions">
       <PwaInstallButton />
       <NotificationBell />
-      <IconButton
-        class="app-header__logout"
-        variant="outline"
-        danger
-        label="Se déconnecter"
-        @click="logout"
-      >
-        <BaseIcon name="logout" :size="18" />
-      </IconButton>
     </div>
   </header>
 </template>

@@ -7,9 +7,6 @@ import BaseText      from '@/components/atoms/BaseText.vue'
 import BaseButton    from '@/components/atoms/BaseButton.vue'
 import BaseIcon      from '@/components/atoms/BaseIcon.vue'
 import AlertBanner from '@/components/molecules/AlertBanner.vue'
-import DangerZone   from '@/components/organisms/DangerZone.vue'
-import ResetDataButton from '@/components/organisms/ResetDataButton.vue'
-import { todayISO } from '@/utils/format.js'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -17,26 +14,6 @@ const api    = useApi()
 
 const profile = ref(null)
 const error   = ref('')
-
-// ── Export des données (portabilité) ─────────────────────────────────────
-const EXPORTS = [
-  { format: 'json', label: 'Tout exporter (JSON)' },
-  { format: 'csv',  label: 'Transactions (CSV)' },
-]
-const exporting   = ref('')
-const exportError = ref('')
-
-async function exportData(format) {
-  exporting.value = format
-  exportError.value = ''
-  try {
-    await api.download(`/api/user/export?format=${format}`, `abyss-${todayISO()}.${format}`)
-  } catch (err) {
-    exportError.value = err.message
-  } finally {
-    exporting.value = ''
-  }
-}
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
 
@@ -142,53 +119,25 @@ onMounted(loadProfile)
         </div>
         <BaseIcon name="chevron" :size="18" />
       </RouterLink>
-    </nav>
 
-    <!-- Support : bugs et améliorations, envoyés par email -->
-    <section class="profile__group">
-      <BaseText as="h2" size="sm" weight="semibold" color="primary">Support</BaseText>
-      <nav class="profile__settings" aria-label="Support">
-        <RouterLink to="/profile/support" class="profile__setting">
-          <BaseIcon name="alert" :size="18" />
-          <div class="profile__setting-body">
-            <BaseText size="sm" weight="medium" color="primary">Signaler un bug</BaseText>
-            <BaseText size="xs" color="muted">Quelque chose ne marche pas comme prévu</BaseText>
-          </div>
-          <BaseIcon name="chevron" :size="18" />
-        </RouterLink>
-
-        <RouterLink :to="{ path: '/profile/support', query: { type: 'idea' } }" class="profile__setting">
-          <BaseIcon name="message" :size="18" />
-          <div class="profile__setting-body">
-            <BaseText size="sm" weight="medium" color="primary">Proposer une amélioration</BaseText>
-            <BaseText size="xs" color="muted">Une idée pour rendre l'app plus utile</BaseText>
-          </div>
-          <BaseIcon name="chevron" :size="18" />
-        </RouterLink>
-      </nav>
-    </section>
-
-    <!-- Mes données : export -->
-    <section class="profile__section">
-      <BaseText as="h2" size="sm" weight="semibold" color="primary">Mes données</BaseText>
-
-      <AlertBanner v-if="exportError">{{ exportError }}</AlertBanner>
-
-      <BaseButton
-        v-for="option in EXPORTS"
-        :key="option.format"
-        variant="secondary"
-        full
-        :loading="exporting === option.format"
-        :disabled="exporting !== ''"
-        @click="exportData(option.format)"
-      >
+      <RouterLink to="/profile/data" class="profile__setting">
         <BaseIcon name="download" :size="18" />
-        {{ option.label }}
-      </BaseButton>
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Mes données</BaseText>
+          <BaseText size="xs" color="muted">Exporter, réinitialiser, supprimer le compte</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
 
-      <ResetDataButton />
-    </section>
+      <RouterLink to="/profile/support" class="profile__setting">
+        <BaseIcon name="message" :size="18" />
+        <div class="profile__setting-body">
+          <BaseText size="sm" weight="medium" color="primary">Support</BaseText>
+          <BaseText size="xs" color="muted">Signaler un bug, proposer une amélioration</BaseText>
+        </div>
+        <BaseIcon name="chevron" :size="18" />
+      </RouterLink>
+    </nav>
 
     <div class="profile__actions">
       <BaseButton class="profile__logout" variant="danger" full @click="logout">
@@ -201,8 +150,6 @@ onMounted(loadProfile)
           : 'Vous restez connecté sur cet appareil — modifiable dans les Préférences.' }}
       </BaseText>
     </div>
-
-    <DangerZone />
 
   </section>
 </template>
@@ -217,15 +164,6 @@ onMounted(loadProfile)
   width: 100%;
 }
 
-.profile__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-}
 
 .profile__list {
   display: flex;
@@ -254,11 +192,6 @@ onMounted(loadProfile)
   color: var(--color-text-muted);
 }
 
-.profile__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
 
 .profile__settings {
   background: var(--color-bg-surface);
