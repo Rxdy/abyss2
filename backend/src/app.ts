@@ -181,6 +181,7 @@ export async function buildApp(opts: { testing?: boolean; prisma?: PrismaClient 
           { name: 'infra',        description: 'Health, statut et monitoring' },
           { name: 'auth',         description: 'Inscription et authentification' },
           { name: 'user',         description: 'Profil utilisateur' },
+          { name: 'support',      description: 'Tickets de support (bug, amélioration) envoyés par email' },
           { name: 'categories',   description: 'Catégories de dépenses' },
           { name: 'transactions', description: 'Transactions et récapitulatif' },
           { name: 'recurring',    description: 'Dépenses et revenus fixes mensuels' },
@@ -215,6 +216,7 @@ export async function buildApp(opts: { testing?: boolean; prisma?: PrismaClient 
   fastify.register(import('./routes/transactions.js'))
   fastify.register(import('./routes/recurring.js'))
   fastify.register(import('./routes/stats.js'))
+  fastify.register(import('./routes/support.js'))
 
   fastify.get('/health', {
     schema: {
