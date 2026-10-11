@@ -14,7 +14,9 @@ defineEmits(['select'])
 
 <template>
   <div class="transaction-list">
-    <BaseText v-if="loading" as="p" size="sm" color="muted" class="transaction-list__state">
+    <!-- « Chargement… » seulement au premier chargement : en revenant sur la page, la liste déjà
+         connue reste affichée pendant sa mise à jour au lieu de clignoter. -->
+    <BaseText v-if="loading && transactions.length === 0" as="p" size="sm" color="muted" class="transaction-list__state">
       Chargement…
     </BaseText>
 
