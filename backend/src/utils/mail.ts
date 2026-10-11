@@ -18,6 +18,9 @@ const LOGO_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'ass
 
 let transporter: Transporter | null = null
 
+/** Relais de développement (Mailpit) : pas de TLS à exiger, rien ne quitte la machine. */
+const LOCAL_SMTP_HOSTS = new Set(['mailpit', 'localhost', '127.0.0.1'])
+
 function getTransporter() {
   if (transporter) return transporter
 
@@ -28,6 +31,10 @@ function getTransporter() {
     host,
     port: Number(process.env.SMTP_PORT ?? 587),
     secure: process.env.SMTP_SECURE === 'true',
+    // Sur le port 587 (SMTP_SECURE=false), STARTTLS n'est sinon qu'opportuniste : un intermédiaire
+    // qui le retire ferait partir le mail en clair, lien de réinitialisation compris. On l'exige
+    // donc avec tout vrai relais ; l'envoi échoue plutôt que de partir sans chiffrement.
+    requireTLS: !LOCAL_SMTP_HOSTS.has(host),
     auth: process.env.SMTP_USER
       ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
       : undefined,
