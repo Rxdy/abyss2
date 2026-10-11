@@ -3,28 +3,56 @@
 Légende : 🔴 à traiter en premier · 🟠 important · 🟡 confort / polish.
 ✅ **vérifié** = reproduit ou mesuré lors de l'audit ; le reste vient de la lecture du code.
 
-État : **349 tests API · 864 tests front · 154 tests base · 10 parcours de bout en bout**, typage backend propre, build OK.
+État : **450 tests API · 949 tests front · 154 tests base · 10 parcours de bout en bout**, typage backend propre, build OK.
 
 ## 1. À faire — feuille de route
 
+- [ ] 🔴 **Barre du bas de la PWA iPhone** : toujours coupée par une bande grise et pas collée au bas
+  de l'écran, malgré le correctif de #27 (body à la hauteur de `screen.height`). Impossible à mesurer
+  sans iPhone : récupérer les vraies mesures — un ticket « Bug » envoyé depuis l'iPhone les joint
+  (hauteurs, zones sûres, correctif actif ou non, position de la barre), ou `make up-lan` avec l'app
+  installée depuis le PC — puis corriger en conséquence
+- [ ] 🟠 **Activer les issues GitHub du support en production** : ajouter `SUPPORT_GITHUB_TOKEN` dans le
+  `.env` du serveur (jeton à grain fin, dépôt abyss2 seul, Issues : Read and write). Sans lui, seul le
+  mail part
+- [ ] 🟡 **Panneau de mesures en dev** : affichage réservé au développement (hauteurs, zones sûres, traits
+  au bas de l'écran et au bas de la barre) pour régler la PWA iPhone avec `make up-lan` et le
+  rechargement à chaud, sans aller-retour en production
+- [ ] 🟡 **Vérifier `make seed`** avec la règle « rien avant le mois de création du compte » (#29) : le seed
+  antidate désormais le compte démo via Prisma, ce n'est pas encore exécuté pour de vrai
 - [ ] 🟠 **Page Statistiques — plus de possibilités** : comparaison de plusieurs catégories/enveloppes
   entre elles (graphique multi-séries) · historique sur 12 mois et plus (actuellement limité à des
   périodes courtes) · export/partage des statistiques (graphique ou PDF d'une période, en plus de
-  l'export JSON/CSV déjà existant sur le Profil)
+  l'export JSON/CSV déjà existant dans Profil → Mes données)
 - [ ] 🟡 **Compte de démo enrichi** : étendre l'historique généré par `make seed` au-delà des 3 mois
   actuels (12–24 mois), pour que les graphiques et tendances du compte démo aient plus de valeur
 - [ ] 🟡 **CI — 3ᵉ étage `build`** : après lint et test, construire les images Docker de production
   (API + front) et vérifier qu'elles démarrent saines — attrape les erreurs de packaging que
   lint/tests ne voient pas
 - [ ] 🟡 **Tests sur les zones à 0 % de couverture** (front) : `ForgotPasswordPage`, `ResetPasswordPage`,
-  `NotFoundPage`, `App.vue`, les layouts (`AuthLayout`, `DefaultLayout`) — aucun test unitaire
-  dédié aujourd'hui, seuls les parcours Playwright les traversent. Côté API, `mail.ts` (18 % de
-  couverture) : l'envoi d'email n'est testé qu'indirectement via `password-reset.test.ts`
+  `NotFoundPage`, `App.vue`, `AuthLayout` — aucun test unitaire dédié aujourd'hui, seuls les parcours
+  Playwright les traversent (`DefaultLayout` et le mail de support sont désormais testés)
 - [ ] 🟡 **Autres notifications** : charge fixe jamais rattrapée depuis plusieurs mois · résumé
   mensuel (recoupe la tâche Stats ci-dessus)
 
 ## 2. Fait
 
+- [X] **Support (Profil → Support)** : bug, amélioration ou autre demande envoyé par email
+  (`POST /api/support`, 5 / h / compte, référence AB-XXXXXX, réponse directe à l'utilisateur, sujet
+  « Support Abyss — <type> : <sujet> », destinataire `SUPPORT_EMAIL` sinon `SMTP_USER`). Bugs et
+  améliorations deviennent aussi une issue GitHub anonymisée (`SUPPORT_GITHUB_TOKEN`). Un ticket de bug
+  joint les mesures de l'écran (#28, #33, #36)
+- [X] **Envoi des mails chiffré obligatoirement** : `requireTLS` avec tout vrai relais SMTP — STARTTLS
+  n'était qu'opportuniste, un lien de réinitialisation pouvait partir en clair (#28)
+- [X] **Rien avant le mois de création du compte** : transactions et charges fixes refusées avant le 1er
+  du mois de création (400 `DATE_BEFORE_ACCOUNT`), calendriers bornés via `earliestDate` ; une saisie
+  déjà plus ancienne reste modifiable (#29)
+- [X] **Profil allégé** : page Mes données (export, réinitialisation, suppression du compte), une seule
+  entrée Support, plus de bouton de déconnexion dans le header — il se confondait avec les
+  notifications (#33)
+- [X] **Navigation** : chaque page repart en haut (le défilement vit dans `<main>`, pas dans la
+  fenêtre) ; plus de « Chargement… » qui clignote en revenant sur une page (#27, #33)
+- [X] **CI réparée** : faille `source-map-js` corrigée, deux tests de chiffrement instables fiabilisés (#30)
 - [X] **`BaseInput` transmet ses attributs au champ** : `inputmode="decimal"` (montants) et
   `autocomplete` arrivent sur l'`<input>` et non plus sur la `<div>` qui l'enveloppe — clavier
   numérique sur mobile pour les montants. Même correctif que `BaseSelect`
