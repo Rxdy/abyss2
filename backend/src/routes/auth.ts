@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { hashEmail, hashToken, encryptEmail, decryptEmail, encryptValue } from '../utils/crypto.js'
 import { sendPasswordResetEmail } from '../utils/mail.js'
 import { rateLimitError } from '../utils/rate-limit.js'
+import { earliestTransactionDate } from '../utils/date.js'
 import { evaluatePassword, weakPasswordMessage } from '../utils/passwordStrength.js'
 import { clearSession, issueSession } from '../utils/session.js'
 import { CATEGORY_USAGE } from './categories.js'
@@ -215,6 +216,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
                 email:    { type: 'string' },
                 currency: { type: 'string', description: 'Devise d\'affichage choisie dans les Préférences' },
                 sessionMode: { type: 'string', enum: ['persistent', 'strict'], description: 'Rester connecté, ou connexion à chaque session' },
+                earliestDate: { type: 'string', format: 'date', description: 'Date la plus ancienne autorisée pour une transaction' },
               },
             },
           },
@@ -243,6 +245,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         tokenVersion:   true,
         currency:       true,
         sessionMode:    true,
+        createdAt:      true,
       },
     })
 
@@ -264,7 +267,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     return reply.code(200).send({
       csrfToken,
-      user: { id: user.id, email: decryptedEmail, currency: user.currency, sessionMode: user.sessionMode },
+      user: {
+        id: user.id, email: decryptedEmail, currency: user.currency, sessionMode: user.sessionMode,
+        earliestDate: earliestTransactionDate(user.createdAt),
+      },
     })
   })
 

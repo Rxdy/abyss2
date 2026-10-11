@@ -1,7 +1,9 @@
 /**
  * Remplit un compte de démonstration via l'API (aucun accès direct à la base :
  * chiffrement, validations, génération des charges fixes et des notifications
- * passent par le vrai code).
+ * passent par le vrai code). Une seule exception : la date de création du compte,
+ * antidatée au début de l'historique — aucune route ne permet de la changer, et
+ * les transactions ne peuvent pas être plus anciennes que le mois de création.
  *
  *   npm run db:seed        (dans le conteneur : make seed)
  *
@@ -16,7 +18,8 @@
  * Variables : SEED_API_URL, SEED_EMAIL, SEED_PASSWORD.
  */
 
-import { DEMO_BUDGETS, buildDemoData } from './demo-data.js'
+import prisma from '../src/lib/prisma.js'
+import { DEMO_BUDGETS, buildDemoData, demoAccountCreatedAt } from './demo-data.js'
 
 const API      = process.env.SEED_API_URL ?? `http://localhost:${process.env.API_PORT ?? 3000}`
 const EMAIL    = process.env.SEED_EMAIL    ?? 'demo@abyss2.dev'
@@ -76,7 +79,8 @@ async function main() {
     console.log(`↺ compte ${EMAIL} existant supprimé`)
   }
 
-  await must('POST', '/api/auth/register', { email: EMAIL, password: PASSWORD }, undefined, 201)
+  const account = await must<{ id: string }>('POST', '/api/auth/register', { email: EMAIL, password: PASSWORD }, undefined, 201)
+  await prisma.user.update({ where: { id: account.id }, data: { createdAt: demoAccountCreatedAt() } })
   const token = await login()
   if (!token) throw new Error(`connexion refusée juste après l'inscription de ${EMAIL}`)
 
@@ -175,7 +179,10 @@ async function main() {
   if (missing.length > 0) throw new Error(`notifications attendues absentes : ${missing.join(', ')}`)
 }
 
-main().catch((error) => {
-  console.error(`✗ seed échoué : ${error.message}`)
-  process.exit(1)
-})
+main()
+  .catch((error) => {
+    console.error(`✗ seed échoué : ${error.message}`)
+    process.exit(1)
+  })
+  // Seule connexion directe à la base (date de création du compte) : la fermer laisse le script se terminer.
+  .finally(() => prisma.$disconnect())

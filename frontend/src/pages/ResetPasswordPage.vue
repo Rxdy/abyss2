@@ -65,7 +65,7 @@ async function submit() {
     // exactement comme au démarrage de l'app (voir App.vue).
     const profile = await api.get('/api/user')
     auth.setSession({
-      user: { id: profile.id, email: profile.email, currency: profile.currency, sessionMode: profile.sessionMode },
+      user: { id: profile.id, email: profile.email, currency: profile.currency, sessionMode: profile.sessionMode, earliestDate: profile.earliestDate },
       csrfToken: profile.csrfToken,
     })
 

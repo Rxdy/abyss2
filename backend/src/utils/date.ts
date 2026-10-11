@@ -20,3 +20,12 @@ export function todayISO(now: Date = new Date(), timeZone = process.env.APP_TIME
 export function currentMonthKey(now: Date = new Date(), timeZone?: string): string {
   return todayISO(now, timeZone).slice(0, 7)
 }
+
+/**
+ * Premier jour du mois de création du compte (yyyy-mm-dd) : aucune transaction ni charge fixe ne
+ * peut être datée avant. Un compte ouvert le 11 octobre compte à partir du 1er octobre — inutile de
+ * ressaisir tout l'historique, la gestion commence avec le compte.
+ */
+export function earliestTransactionDate(createdAt: Date, timeZone?: string): string {
+  return `${currentMonthKey(createdAt, timeZone)}-01`
+}

@@ -146,6 +146,14 @@ function daysInMonth(year: number, month0: number) {
   return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate()
 }
 
+/**
+ * Date de création à donner au compte de démo : le 1er du premier mois d'historique. Sans elle,
+ * la règle « rien avant le mois de création du compte » refuserait l'historique généré.
+ */
+export function demoAccountCreatedAt(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (HISTORY_MONTHS - 1), 1, 12))
+}
+
 // ── Génération ──────────────────────────────────────────────
 
 export function buildDemoData(now: Date = new Date()): DemoData {
